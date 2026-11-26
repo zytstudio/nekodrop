@@ -6,6 +6,18 @@
 
 ---
 
+## v2.2.13 (Preview / 预览版)
+
+### 中文
+
+- 深色主题下，窗口顶部的「已就绪，可收发」和其他状态文字会随主题变色，不再显示成难以辨认的黑字。 ([#80](https://github.com/zheznanohana/nekodrop/issues/80))
+
+### English
+
+- Fixed the title-bar status text staying black in dark mode. ([#80](https://github.com/zheznanohana/nekodrop/issues/80))
+
+---
+
 ## v2.2.12 (Preview / 预览版) — 2026-11-26
 
 ### 中文

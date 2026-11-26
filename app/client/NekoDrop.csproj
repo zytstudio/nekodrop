@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>nekodrop</AssemblyName>
     <RootNamespace>NekoDrop</RootNamespace>
-    <Version>2.2.12</Version>
+    <Version>2.2.13</Version>
     <Product>nekodrop</Product>
     <Description>nekodrop: AirDrop for Windows</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>

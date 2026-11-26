@@ -56,7 +56,8 @@
             </ToggleButton.Template>
             <StackPanel Orientation="Horizontal">
               <Ellipse x:Name="StatusDot" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0"/>
-              <TextBlock x:Name="StatusText" FontSize="12" MaxWidth="150" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+              <TextBlock x:Name="StatusText" FontSize="12" Foreground="{DynamicResource Text}" MaxWidth="150"
+                         TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
               <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Foreground="{DynamicResource Text3}" Margin="6,1,0,0"/>
             </StackPanel>
           </ToggleButton>

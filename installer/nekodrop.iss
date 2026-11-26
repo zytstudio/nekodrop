@@ -2,7 +2,7 @@
 ; One exe installs everything: the client and service (self-contained, no .NET
 ; needed), the user-mode radio, awdld + Wintun, the AirDrop engine with its own
 ; Python, the register-proxy driver, TAP-Windows, firewall rules and the service.
-#define AppVersion "2.2.12"
+#define AppVersion "2.2.13"
 
 [Setup]
 AppId={{6C1F2E7A-4B8E-4E57-9C61-5E2B1D0A9F31}
