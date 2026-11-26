@@ -732,7 +732,7 @@ if ($card) {
   }
   if ($otherWireless.Count) {
     W ''
-    W 'Which cards nekodrop can support, and why: https://github.com/zheznanohana/nekodrop/blob/main/docs/HARDWARE.md'
+    W 'Which cards nekodrop can support, and why: https://github.com/zytstudio/nekodrop/blob/main/docs/HARDWARE.md'
   }
 }
 if ($config) {

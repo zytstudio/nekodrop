@@ -22,6 +22,7 @@
 - **MediaTek 驱动共享 32-bit KMDF 公共缓冲区辅助模块（[#74](https://github.com/zheznanohana/nekodrop/pull/74)，感谢 `@Yanlyn`）**：
   - 新增 `driver/common/` 共享分配器头文件与 `CTest` 单元测试。
 - **移除自动更新（本分支）**：删除 `Updater`（GitHub Releases 检查、下载、SHA-256 核对与运行安装包）、启动后 1 分钟与每 6 小时的定时检查、「发现新版本」通知、主界面更新条、设置页的更新选项，以及 `nekodrop:update` 激活；*设置 → 关于* 只显示版本并说明本构建不会自动更新（自动更新会把下游构建换成不带 USB 支持的上游版本）。版本号改由新增的 `AppVersion` 提供，`Settings` 中的更新相关字段一并移除。
+- **诊断报告与 Issue 链接指向本仓库（本分支）**：安装器的报错提示、"提交报告到这里"以及报告里的卡片文档链接都改为 `github.com/zytstudio/nekodrop`，USB 相关的日志和问题不再指向上游。
 - **新增 Realtek RTL8821CU（USB 无线网卡）支持（本分支新增，实验性）**：
   - 新增 `radio\nekodrop-radio-usb.exe`（`usbradio/`）：winawdl 同一份 radio 源码，改走 devourer 的 libusb 传输，只编译 Jaguar2 8821C 后端；新增 `scripts/patch-radio-usb.py`（`--usb VID:PID`、`Doorbell` 抽象、1T1R 速率）与 `scripts/build-radio-usb.ps1`；
   - 新增 `driver/winusb/nekodrop_winusb.inf`（WinUSB，`0BDA:C820`/`C821`），由安装器在目标机签名并加入驱动库；服务首次接管时绑定，`HandsBackCard = false` 表示这块网卡专供 nekodrop，直到一键回退/卸载才还给 Realtek；
@@ -48,6 +49,7 @@
 - **Shared 32-bit KMDF common-buffer allocator for MediaTek queues ([#74](https://github.com/zheznanohana/nekodrop/pull/74), thanks `@Yanlyn`):**
   - Added `driver/common/` headers and `CTest` unit tests.
 - **No updater in this fork:** removed `Updater` (the GitHub Releases check, download, SHA-256 verification and installer launch), the one-minute and six-hourly checks, the "update available" toast, the main-window update bar, the settings toggles and the `nekodrop:update` activation. *Settings -> About* only shows the version and says the build never updates itself (an automatic update would replace this fork with an upstream build without USB support). The version now comes from the new `AppVersion` class, and the update fields are gone from `Settings`.
+- **Diagnostic report and issue links point at this repository:** the installer's message ("post the report at ..."), its report.ps1 link and the card documentation link inside the report now use `github.com/zytstudio/nekodrop`, so USB logs and issues stay downstream.
 - **New in this fork: Realtek RTL8821CU USB Wi-Fi card support (experimental):**
   - New `radio\nekodrop-radio-usb.exe` (`usbradio/`): the same winawdl radio source over devourer's libusb transport, with only the Jaguar2 8821C backend; new `scripts/patch-radio-usb.py` (`--usb VID:PID`, a `Doorbell` abstraction, a 1T1R rate) and `scripts/build-radio-usb.ps1`;
   - New `driver/winusb/nekodrop_winusb.inf` (WinUSB, `0BDA:C820`/`C821`), signed on the target PC by the installer and added to the driver store; the service binds it on the first take and `HandsBackCard = false` keeps this dongle on nekodrop until restore/uninstall gives it back to Realtek;
