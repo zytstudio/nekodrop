@@ -52,6 +52,9 @@ $WifiChips = @{
   # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
   # via nekodrop's built-in devourer backend (on-demand AirDrop).
   '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
+  # Realtek RTL8821CU: a USB dongle driven over libusb (nekodrop-radio-usb.exe).
+  '0BDA:C820' = @('supported-rtl-usb', 'Realtek RTL8821CU (USB)')
+  '0BDA:C821' = @('supported-rtl-usb', 'Realtek RTL8821CU (USB)')
   # MediaTek MT7902: built-in mt76 port (nekodrop-radio-mt.exe, 5 GHz Wi-Fi beside AirDrop or on-demand).
   '14C3:7902' = @('supported-mtk', 'MediaTek MT7902')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
@@ -99,6 +102,7 @@ $WifiKinds = @{
   'supported'     = @('supported by nekodrop', '')
   'supported-mtk' = @('supported by nekodrop (5 GHz Wi-Fi beside AirDrop, or on-demand; built-in MediaTek backend)', 'Joins 5 GHz Wi-Fi beside AirDrop, or runs on demand while Windows keeps Wi-Fi.')
   'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
+  'supported-rtl-usb' = @('supported by nekodrop (experimental; USB dongle, on-demand AirDrop, built-in RTL8821CU backend)', 'nekodrop keeps this dongle: it is bound to nekodrop''s WinUSB driver, so the dongle has no Wi-Fi of its own from the first AirDrop on. Start menu > nekodrop - restore Windows Wi-Fi gives it back.')
   'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
   'intel-be-exp'  = @('supported by nekodrop (experimental, Concurrent Wi-Fi beside AirDrop or on-demand, not yet run on a real card)', 'Joins Wi-Fi beside AirDrop or runs on demand while Windows keeps Wi-Fi. Please post a diagnostic report in an issue whether it works or not.')
   'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
@@ -121,7 +125,13 @@ function Classify-WifiCard([string]$InstanceId, [string]$FriendlyName = '') {
   if ($id -match '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
   elseif ($id -match '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
   $kind = 'other'; $chip = ''
-  if ($bus -eq 'USB') { $kind = 'usb' }
+  if ($bus -eq 'USB') {
+    # A USB dongle nekodrop drives (RTL8821CU) is in the table; every other USB
+    # wireless adapter is refused as before.
+    $usbKey = $vendor + ':' + $device
+    if ($vendor -and $WifiChips.ContainsKey($usbKey)) { $kind = $WifiChips[$usbKey][0]; $chip = $WifiChips[$usbKey][1] }
+    else { $kind = 'usb' }
+  }
   elseif ($bus -eq 'PCI' -and $vendor) {
     $key = $vendor + ':' + $device
     if ($vendor -eq '8086' -and $SupportedIntelIds -contains $device) { $kind = 'supported'; $chip = 'Intel Wi-Fi 6/6E' }
@@ -141,19 +151,20 @@ function Classify-WifiCard([string]$InstanceId, [string]$FriendlyName = '') {
     Chip = $chip; Family = $chip; Kind = $kind; Status = $WifiKinds[$kind][0]; Note = $WifiKinds[$kind][1]
   }
 }
-# A known Wi-Fi chip by its PCI ID (supported or not).
+# A known Wi-Fi chip by its PCI or USB ID (supported or not).
 function Test-KnownWifiId([string]$InstanceId) {
   $c = Classify-WifiCard $InstanceId
-  if ($c.Bus -ne 'PCI') { return $false }
+  if (-not $c.VendorId) { return $false }
   return ($c.Kind -eq 'supported' -or $WifiChips.ContainsKey($c.VendorId + ':' + $c.DeviceId))
 }
 
 # ------------------------------------------------------ the refusal message
 # The supported-card check: exact 15 Intel IDs plus Realtek RTL8852CE
-# (10EC:C852) and MediaTek MT7902/MT7921/MT7922, with a 4-hex boundary so a
-# 5-digit device ID (e.g. DEV_43F01 or DEV_C8520) can never match.
-$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_8086&DEV_272B|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))(?=&|\\|$)'
-$NoSupportedCard = 'This PC has no Wi-Fi card nekodrop supports (Intel AX201, AX200, AX210, AX211, AX411, 9560 on Qu, BE200 (experimental), Realtek RTL8852CE 10EC:C852, or MediaTek MT7902/MT7921/MT7922); nekodrop cannot run here.'
+# (10EC:C852), the Realtek RTL8821CU USB dongle (0BDA:C820, C821) and MediaTek
+# MT7902/MT7921/MT7922, with a 4-hex boundary so a 5-digit device ID (e.g.
+# DEV_43F01 or DEV_C8520) can never match.
+$SupportedCardPattern = '^(?:PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_8086&DEV_272B|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))|USB\\VID_0BDA&PID_(C820|C821))(?=&|\\|$)'
+$NoSupportedCard = 'This PC has no Wi-Fi card nekodrop supports (Intel AX201, AX200, AX210, AX211, AX411, 9560 on Qu, BE200 (experimental), Realtek RTL8852CE 10EC:C852, Realtek RTL8821CU USB 0BDA:C820, or MediaTek MT7902/MT7921/MT7922); nekodrop cannot run here.'
 $ReportUrl = 'https://github.com/zheznanohana/nekodrop/blob/main/installer/report.ps1'
 $IssuesUrl = 'https://github.com/zheznanohana/nekodrop/issues'
 # Adapter names that say wireless. As report.ps1: not bare "Killer" (its
@@ -240,8 +251,8 @@ if ($SelfTest) {
   }
   function Ascii([string]$s) { return ("$s" -cmatch '^[\x09\x0A\x0D\x20-\x7E]*$') }
 
-  # The supported-card check: exact 15 Intel IDs + Realtek RTL8852CE + MediaTek MT7902/MT7921/MT7922 with 4-hex boundary.
-  if ($SupportedCardPattern -ne '^PCI\\(?:VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)|VEN_8086&DEV_272B|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))(?=&|\\|$)') {
+  # The supported-card check: exact 15 Intel IDs + Realtek RTL8852CE + RTL8821CU USB + MediaTek MT7902/MT7921/MT7922 with 4-hex boundary.
+  if ($SupportedCardPattern -ne '^(?:PCI\\(?:VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)|VEN_8086&DEV_272B|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))|USB\\VID_0BDA&PID_(C820|C821))(?=&|\\|$)') {
     $fail += "supported-card pattern changed: $SupportedCardPattern"
   }
   foreach ($mtkDev in '7902', '7961', '0608', '7922', '0616') {
@@ -271,6 +282,23 @@ if ($SelfTest) {
   }
   if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC').Kind -eq 'supported-rtl' -or (Test-KnownWifiId 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC')) {
     $fail += '5-digit device ID DEV_C8520 matched as RTL8852CE'
+  }
+
+  # Realtek RTL8821CU USB dongle (0BDA:C820, C821): the Wi-Fi function of a
+  # composite device, the whole-device ID, bare and lower case, and never a
+  # 5-digit PID or a different Realtek USB ID.
+  foreach ($usbPid in 'C820', 'C821') {
+    foreach ($okUsb in "USB\VID_0BDA&PID_$usbPid&REV_0200&MI_02\B&1D92DF5B&0&0002", "USB\VID_0BDA&PID_$usbPid\123456", "USB\VID_0BDA&PID_$usbPid", "usb\vid_0bda&pid_$($usbPid.ToLower())&mi_02\B&1") {
+      if ($okUsb -notmatch $SupportedCardPattern) { $fail += "$okUsb not accepted" }
+      $uc = Classify-WifiCard $okUsb
+      if ($uc.Kind -ne 'supported-rtl-usb' -or $uc.Chip -ne 'Realtek RTL8821CU (USB)') { $fail += "$okUsb classified as $($uc.Kind) / $($uc.Chip)" }
+      if (-not (Test-KnownWifiId $okUsb)) { $fail += "$okUsb not a known WiFi ID" }
+    }
+    if ("USB\VID_0BDA&PID_$($usbPid)1\1" -match $SupportedCardPattern) { $fail += "5-digit USB PID $($usbPid)1 accepted" }
+  }
+  foreach ($noUsb in 'USB\VID_0BDA&PID_C822&REV_0200&MI_02\B&1', 'USB\VID_0BDA&PID_8812\00E04C000001', 'USB\VID_0BDA&PID_C811\1') {
+    if ($noUsb -match $SupportedCardPattern) { $fail += "$noUsb accepted as supported" }
+    if ((Classify-WifiCard $noUsb).Kind -ne 'usb') { $fail += "$noUsb classified as $((Classify-WifiCard $noUsb).Kind)" }
   }
 
   # A laptop with an unsupported Realtek RTL8852BE that has no driver yet (so no
@@ -475,7 +503,7 @@ function Stop-FromTarget {
   $root = [IO.Path]::GetFullPath($Target).TrimEnd('\') + '\'
   # Never by path under a drive root or a folder that is not nekodrop's.
   $byPath = $root.Length -gt 4 -and ((Test-Path (Join-Path $root 'NekoDropService.exe')) -or (Test-Path (Join-Path $root 'python\python.exe')))
-  $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, nekodrop-radio-mt, nekodrop-radio-mtk, awdld, NekoDropService -ErrorAction SilentlyContinue) +
+  $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, nekodrop-radio-usb, nekodrop-radio-mt, nekodrop-radio-mtk, awdld, NekoDropService -ErrorAction SilentlyContinue) +
           @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
               try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
   # Processes started from elsewhere that name the folder on their command
@@ -548,7 +576,7 @@ public static extern bool MoveFileEx(string from, string to, int flags);
 
 'Driver'
 $driver = Join-Path $Target 'driver'
-Step 'sign the register-proxy driver with a certificate made and trusted on this PC' {
+Step 'sign the register-proxy and USB-dongle drivers with a certificate made and trusted on this PC' {
   foreach ($store in $TrustStores) {
     Get-ChildItem "Cert:\LocalMachine\$store" | Where-Object { $_.Subject -eq $CertSubject } | Remove-Item
   }
@@ -560,8 +588,11 @@ Step 'sign the register-proxy driver with a certificate made and trusted on this
     Export-Certificate -Cert $cert -FilePath $public | Out-Null
     foreach ($store in $TrustStores) { Import-Certificate -FilePath $public -CertStoreLocation "Cert:\LocalMachine\$store" | Out-Null }
     $signtool = Join-Path $Target 'shell\signtool.exe'
-    foreach ($file in 'winawdl_regproxy.cat', 'winawdl_regproxy.dll') {
+    # The PCIe register proxy, and the WinUSB package the RTL8821CU USB dongle
+    # needs (same certificate, same trusting steps; only its .cat is signed).
+    foreach ($file in 'winawdl_regproxy.cat', 'winawdl_regproxy.dll', 'nekodrop_winusb.cat') {
       $full = Join-Path $driver $file
+      if (-not (Test-Path $full)) { continue }
       $r = Set-AuthenticodeSignature -FilePath $full -Certificate $cert -HashAlgorithm SHA256
       if ($r.Status -ne 'Valid') {
         # Windows 11 25H2 (build 26200.9974+) can fail Set-AuthenticodeSignature on
@@ -601,9 +632,16 @@ Step 'sign the register-proxy driver with a certificate made and trusted on this
     Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey
   }
 }
-Step 'add it to the driver store (binds nothing)' {
+Step 'add them to the driver store (binds nothing)' {
   pnputil /add-driver (Join-Path $driver 'winawdl_regproxy.inf') | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "pnputil could not add the driver ($LASTEXITCODE)" }
+  # The RTL8821CU dongle's WinUSB package: the service binds it when it first
+  # takes the dongle (Card.Bind, like the register proxy), not here.
+  $winusb = Join-Path $driver 'nekodrop_winusb.inf'
+  if (Test-Path $winusb) {
+    pnputil /add-driver $winusb | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "pnputil could not add the USB dongle driver ($LASTEXITCODE)" }
+  }
 }
 
 'Network'

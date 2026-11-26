@@ -44,6 +44,7 @@ public static class RadioBackends
     {
         new IwxRadioBackend(),
         new DevourerRadioBackend(),
+        new RtlUsbRadioBackend(),
         new Mt76RadioBackend(),
         new MtkRadioBackend(),
     }.ToDictionary(b => b.Kind);
@@ -98,6 +99,29 @@ public sealed class DevourerRadioBackend : IRadioBackend
     public string ExeName => "nekodrop-radio-rtl.exe";
 
     public IReadOnlyList<string> BuildArgs(RadioStart s) => [s.Channel.ToString(), "--width", s.Width.ToString()];
+}
+
+/// <summary>
+/// Realtek RTL8821CU (USB dongle): the same winawdl radio as the RTL8852CE, but
+/// over devourer's libusb transport instead of the PCIe register proxy,
+/// shipped as nekodrop-radio-usb.exe. Monitor and inject only, no station, and
+/// the dongle is never given back (CardCatalog: HandsBackCard false). The
+/// dongle's own id goes to the daemon, which then needs no bus scan.
+///
+/// Width: 20 MHz. devourer's 8821C path has a degraded 40 MHz mode that only a
+/// USB replug clears (measured on the reference implementation, DropBridge, with
+/// this chip), and 20 MHz measured slightly faster there too.
+/// </summary>
+public sealed class RtlUsbRadioBackend : IRadioBackend
+{
+    public RadioBackendKind Kind => RadioBackendKind.RtlUsb;
+    public string ExeName => "nekodrop-radio-usb.exe";
+
+    public IReadOnlyList<string> BuildArgs(RadioStart s) =>
+    [
+        s.Channel.ToString(), "--width", "20",
+        "--usb", $"0bda:{s.Profile.DeviceId.ToLowerInvariant()}",
+    ];
 }
 
 /// <summary>

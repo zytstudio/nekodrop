@@ -1,0 +1,58 @@
+; SPDX-License-Identifier: MIT
+; WinUSB driver for the USB Wi-Fi cards nekodrop drives with devourer
+; (RTL8821CU, 0BDA:C820). The radio talks to the chip through libusb, so the
+; device needs Microsoft's in-box WinUSB driver instead of the register proxy
+; driver/regproxy uses for PCIe cards: there is no BAR to map on USB.
+; Adapted from the WinUSB INF libwdi/Zadig generate, which is the same
+; Include/Needs winusb.inf pattern.
+;
+; Matching: the function's hardware ID (USB\VID_0BDA&PID_C820&MI_02, the Wi-Fi
+; interface of a composite dongle; Bluetooth keeps interfaces 0/1) and the
+; whole-device ID (a single-interface dongle, or the fallback where WinUSB
+; replaces the composite parent). The IDs carry no SUBSYS and rank below the
+; vendor's own driver package, so adding this takes over nothing: NekoDropService
+; (or scripts\take-card.ps1) binds it explicitly.
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = USBDevice
+ClassGuid   = {88bae032-5a81-49f0-bc3d-a4ff138216d6}
+Provider    = %Provider%
+CatalogFile = nekodrop_winusb.cat
+DriverVer   = 11/26/2026,0.1.0.0
+PnpLockdown = 1
+
+[Manufacturer]
+%Provider% = WinUsbDevices, NTamd64.10.0...19041
+
+[WinUsbDevices.NTamd64.10.0...19041]
+; The Wi-Fi FUNCTION of the composite RTL8821CU dongle (MI_02). Bluetooth keeps
+; interfaces 0/1 on its own driver, and the composite parent keeps usbccgp: the
+; WinUSB device is one function, not the whole stick (the same binding DropBridge
+; uses for this chip). The generic whole-device ID is deliberately NOT listed:
+; binding it replaces the composite driver and the dongle's Wi-Fi then receives
+; almost nothing.
+%DeviceDesc% = WinUsb_Install, USB\VID_0BDA&PID_C820&MI_02
+%DeviceDesc% = WinUsb_Install, USB\VID_0BDA&PID_C821&MI_02
+
+[WinUsb_Install.NT]
+Include = winusb.inf
+Needs   = WINUSB.NT
+
+[WinUsb_Install.NT.HW]
+Include = winusb.inf
+Needs   = WINUSB.NT.HW
+AddReg  = WinUsb_HwAddReg
+
+[WinUsb_Install.NT.Services]
+Include = winusb.inf
+Needs   = WINUSB.NT.Services
+
+[WinUsb_HwAddReg]
+; libusb enumerates USB devices through this device interface class, and WinUSB
+; adds its own alongside it. Without it libusb_open finds nothing.
+HKR,,DeviceInterfaceGUIDs,0x00010000,"{A5DCBF10-6530-11D2-901F-00C04FB951ED}"
+
+[Strings]
+Provider   = "winairdrop project"
+DeviceDesc = "Realtek RTL8821CU Wi-Fi user-space radio (nekodrop)"

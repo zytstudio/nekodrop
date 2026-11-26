@@ -180,7 +180,10 @@ public sealed class Supervisor : IDisposable
                 _caps = p.Capabilities;
                 _cardLabel = $"{p.VendorName} {p.FamilyName}";
                 // Same line as before the catalog for Intel cards ("Intel INF on record").
-                Say($"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
+                // A USB dongle's instance ID ends in its serial number (often its
+                // MAC), which the diagnostic report redacts: log the hardware ID.
+                var shown = card.Profile.Bus == AdapterBus.Usb ? card.Profile.HardwareId : card.InstanceId;
+                Say($"card: {shown}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
                     $"; {p.VendorName} INF on record {Path.GetFileName(_cfg.VendorInf)}");
                 var c = p.Capabilities;
                 Say($"card profile: {p.VendorName} {p.FamilyName} ({p.VendorId}:{p.DeviceId}), radio {p.Backend}, " +
@@ -203,11 +206,17 @@ public sealed class Supervisor : IDisposable
         _ = Task.Run(SetTapMetric);
         if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
         else if (EffectiveMode() == NetMode.Concurrent) Start("boot (concurrent mode)");
+        // A dedicated card (the USB dongle) starts at boot and stays: its first
+        // bring-up costs ~50 s, which no user should pay on every AirDrop.
+        else if (_profile?.Capabilities.HandsBackCard == false) Start("boot (dedicated card)");
         else
         {
             EnsureVendorDriver();
             // Networks lost by an earlier version or a card re-detected outside nekodrop.
-            _ = Task.Run(() => WlanBackup.Restore(Say, TimeSpan.FromSeconds(30)));
+            // A card the user keeps (the RTL8821CU USB dongle) has no WLAN interface
+            // of its own to put them back on: netsh would only log an error.
+            if (_profile is null || _profile.Capabilities.HandsBackCard)
+                _ = Task.Run(() => WlanBackup.Restore(Say, TimeSpan.FromSeconds(30)));
         }
         _ = Task.Run(() => Watchdog(_cts.Token));
     }
@@ -233,7 +242,7 @@ public sealed class Supervisor : IDisposable
         }
         Say($"experimental fast passive-channel unlock: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+            _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         Publish();
     }
 
@@ -248,7 +257,7 @@ public sealed class Supervisor : IDisposable
         }
         Say($"experimental coexistence plan: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+            _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         Publish();
     }
 
@@ -263,7 +272,7 @@ public sealed class Supervisor : IDisposable
         }
         Say($"experimental high-throughput mode (HE80 + MTU 1500): {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+            _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         Publish();
     }
 
@@ -287,7 +296,7 @@ public sealed class Supervisor : IDisposable
         Say(hardwareId == "" ? "card: automatic detection" : $"card: {hardwareId} chosen in settings as {model}");
         if (Card.Find() is { } c) { _profile = c.Profile; _caps = c.Profile.Capabilities; _cardLabel = $"{c.Profile.VendorName} {c.Profile.FamilyName}"; }
         else _cardLabel = "";
-        if (_wanted) _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        if (_wanted) _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         Publish();
         return "";
     }
@@ -318,7 +327,7 @@ public sealed class Supervisor : IDisposable
         // arrives after the move, so every start sat on channel 6 first). On a
         // passive channel the radio waits for a beacon before transmitting, and
         // the 30 s check below falls back to the start channel.
-        _ = Task.Run(() => Launch(_cfg.PeerChannel != 0 ? _cfg.PeerChannel : _cfg.StartChannel));
+        _ = Task.Run(() => Launch(_cfg.PeerChannel != 0 ? _cfg.PeerChannel : DefaultStartChannel));
     }
 
     public void Stop(string why, bool giveBack)
@@ -448,13 +457,22 @@ public sealed class Supervisor : IDisposable
             var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, true, _cfg.FastUnlock,
                                                       _cfg.CoexPlan, btCoexBalanced: true, highThroughput: _cfg.HighThroughput);
             _startedAt = DateTime.UtcNow;
-            _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine);
+            // The USB dongle's hardware block-ack scoreboard can wedge after a gap
+            // on a long aggregate stream and leave the phone stalled; a small window
+            // keeps each agreement short-lived (nekodrop-radio-usb reads this).
+            var radioEnv = _profile?.Backend == RadioBackendKind.RtlUsb ? UsbRadioEnvironment() : null;
+            _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine, radioEnv);
             // awdld connects to the radio's pipe; give the firmware time to boot.
             for (int i = 0; i < 100 && State == RadioState.Starting && _radio is { HasExited: false }; i++) Thread.Sleep(100);
             if (_radio is null || _radio.HasExited) throw new InvalidOperationException("the radio exited during bring-up: " + _detail);
-            string[] awdlArgs = _cfg.HighThroughput
-                ? ["-c", channel.ToString(), "-H", "-M", "1500"]
-                : ["-c", channel.ToString()];
+            // The USB dongle is 1T1R, so awdld must say so (-s 1): announcing two
+            // spatial streams makes the phone pick 2SS rates this receiver cannot
+            // decode, and the whole transfer falls back to retries.
+            string[] awdlArgs = _profile?.Backend == RadioBackendKind.RtlUsb
+                ? ["-c", channel.ToString(), "-s", "1"]
+                : _cfg.HighThroughput
+                    ? ["-c", channel.ToString(), "-H", "-M", "1500"]
+                    : ["-c", channel.ToString()];
             _awdld = Spawn(Path.Combine(_root, "awdl", "awdld.exe"), awdlArgs, OnAwdldLine);
         }
         catch (Exception e)
@@ -530,6 +548,11 @@ public sealed class Supervisor : IDisposable
             lock (_lock)
             {
                 State = RadioState.On;
+                // The radio just came up: that is use, whatever the bring-up cost.
+                // A slow card (the USB dongle takes ~50 s) would otherwise be stopped
+                // as idle by the watchdog straight after its first "ready".
+                _lastUse = DateTime.UtcNow;
+                _lastData = DateTime.UtcNow;
                 bootScan = _wantBootScan;
                 bootBackground = _pendingConnect is null;
                 _wantBootScan = false;
@@ -763,8 +786,14 @@ public sealed class Supervisor : IDisposable
             var radioDown = radio is null || radio.HasExited;
             var awdldDown = State is RadioState.On or RadioState.Error && (awdld is null || awdld.HasExited);
             // A radio that never says "ready" would hold Starting for good (Codex review #12).
+            // A USB card's user-mode bring-up is far slower than a PCIe card's: the
+            // RTL8821CU writes ~12k PHY registers one vendor control transfer at a
+            // time (~50 s measured), so that backend gets a longer deadline.
+            var readyAllowance = _profile?.Backend == RadioBackendKind.RtlUsb
+                ? TimeSpan.FromSeconds(240)
+                : TimeSpan.FromSeconds(60);
             var startStuck = State == RadioState.Starting && _launchGate.CurrentCount > 0 &&
-                             DateTime.UtcNow - _startedAt > TimeSpan.FromSeconds(60);
+                             DateTime.UtcNow - _startedAt > readyAllowance;
             if (_scanBusy && DateTime.UtcNow - _scanStartedAt > TimeSpan.FromSeconds(30))
                 lock (_lock) { _scanBusy = false; _scanPending = []; }
             if ((radioDown || awdldDown || startStuck) && (State != RadioState.Starting || startStuck) &&
@@ -816,7 +845,7 @@ public sealed class Supervisor : IDisposable
                     continue;
                 }
                 Say(startStuck ? "the radio never became ready; restarting" : "a daemon stopped; restarting");
-                Relaunch(_channel == 0 ? _cfg.StartChannel : _channel);
+                Relaunch(_channel == 0 ? DefaultStartChannel : _channel);
             }
             else if (State == RadioState.On && DateTime.UtcNow - _startedAt > TimeSpan.FromMinutes(2))
             {
@@ -824,7 +853,7 @@ public sealed class Supervisor : IDisposable
             }
             // Wi-Fi down for a while: look for a known network to join.
             var now = DateTime.UtcNow;
-            var mtk = _profile.Backend == RadioBackendKind.MtkRadio;
+            var mtk = _profile?.Backend == RadioBackendKind.MtkRadio;
             // A full MT792x scan takes the radio away from AWDL for ~10 seconds
             // (#54, #56). Don't start automatic retries during a transfer; if
             // no network joins, back off instead of breaking sync every 40 s.
@@ -840,7 +869,11 @@ public sealed class Supervisor : IDisposable
                 if (mtk && _mtkBackgroundScans < 4) _mtkBackgroundScans++;
                 WifiScan(background: true);
             }
+            // A card the user dedicated to nekodrop (the USB dongle) is never
+            // stopped for being idle: it has no other use, and every restart costs
+            // another ~50 s of bring-up.
             if (EffectiveMode() == NetMode.OnDemand && State == RadioState.On &&
+                _profile?.Capabilities.HandsBackCard != false &&
                 DateTime.UtcNow - _lastUse > TimeSpan.FromSeconds(_cfg.IdleSeconds))
                 Stop("idle", giveBack: true);
             if (DateTime.UtcNow - _probeAt >= TimeSpan.FromSeconds(15))
@@ -892,7 +925,7 @@ public sealed class Supervisor : IDisposable
                 Say("Wi-Fi did not come back after joining again; restarting the radio");
                 _probeFails = 0;
                 _rejoinAsked = false;
-                _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+                _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
                 return;
             }
             // The rejoin we asked for disconnects briefly: keep the episode, so a
@@ -957,7 +990,7 @@ public sealed class Supervisor : IDisposable
             Say($"{why} after joining again; restarting the radio");
             _probeFails = 0;
             _rejoinAsked = false;
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+            _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         }
     }
 
@@ -972,8 +1005,11 @@ public sealed class Supervisor : IDisposable
         // Only the vendor's INF is the one to give the card back to, never the proxy's (issue #12).
         // Not checked against the vendor's provider names: OEM repackages of
         // Intel's driver carry other names, and refusing them would leave the
-        // card with no driver to go back to.
-        if (card.InfPath != "" && !Card.BoundToProxy(card))
+        // card with no driver to go back to. A card the user keeps (the RTL8821CU
+        // USB dongle) is never given back, so nothing is recorded for it; the
+        // dongle's first-recorded INF would be the composite parent's, not
+        // Realtek's, and restore.ps1 rebinds it from the driver store anyway.
+        if (card.InfPath != "" && !Card.BoundToProxy(card) && card.Profile.Capabilities.HandsBackCard)
         {
             lock (_lock) { _cfg.VendorInf = card.InfPath; _cfg.Save(); }
         }
@@ -1125,7 +1161,7 @@ public sealed class Supervisor : IDisposable
             _staSsid = ssid;
         }
         Say($"Wi-Fi: joining \"{ssid}\" (chosen in nekodrop)");
-        _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
         return "";
     }
 
@@ -1141,7 +1177,7 @@ public sealed class Supervisor : IDisposable
         }
         Say("Wi-Fi: disconnected by the user");
         Publish();
-        _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        _ = Task.Run(() => Relaunch(_channel == 0 ? DefaultStartChannel : _channel));
     }
 
     public void WifiForget(string ssid)
@@ -1262,9 +1298,22 @@ public sealed class Supervisor : IDisposable
     /// <summary>The card runs nekodrop's kernel Wi-Fi driver (nekodrop-wlan.sys).</summary>
     static bool KernelDriver => Card.Find() is { } k && Card.ByKernelDriver(k);
 
+    /// <summary>
+    /// The channel a start uses until a peer names one. The RTL8821CU USB dongle
+    /// starts on 149, AWDL's 5 GHz social channel and the configuration this
+    /// chip's devourer path is tested with (DropBridge drives the same dongle
+    /// there; on 2.4 GHz it never heard a peer); every other card starts on the
+    /// configured channel.
+    /// </summary>
+    int DefaultStartChannel => _profile?.Backend == RadioBackendKind.RtlUsb ? 149 : _cfg.StartChannel;
+
     void EnsureVendorDriver()
     {
         var card = Card.Find();
+        // A card the user dedicated to nekodrop (the RTL8821CU USB dongle:
+        // AdapterCapabilities.HandsBackCard false) stays on its WinUSB driver;
+        // only restore/uninstall puts the vendor's driver back.
+        if (card is not null && !card.Profile.Capabilities.HandsBackCard) return;
         // Ours (running or not), or left with no driver by a failed bind: the vendor's driver goes back on.
         if (card is null || (!Card.BoundToProxy(card) && card.InfPath != "")) return;
         var vendor = card.Profile.VendorName;
@@ -1307,7 +1356,25 @@ public sealed class Supervisor : IDisposable
         catch (Exception e) { Say("giving the card back failed: " + e.Message); }
     }
 
-    Process Spawn(string exe, IEnumerable<string> args, Action<string> onLine)
+    /// <summary>
+    /// What the USB dongle's radio reads from its environment. Today only the
+    /// block-ack window granted to the phone: a 64-frame window lets one lost
+    /// frame wedge the 8821CU's scoreboard for the rest of the upload, so the
+    /// window is kept small (8) unless NEKODROP_USB_BA_WINDOW says otherwise
+    /// ("off" leaves it at the radio's own default).
+    /// </summary>
+    static Dictionary<string, string>? UsbRadioEnvironment()
+    {
+        var window = Environment.GetEnvironmentVariable("NEKODROP_USB_BA_WINDOW") is { Length: > 0 } v
+            ? v.Trim()
+            : "8";
+        if (window.Length == 0 || string.Equals(window, "off", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return new Dictionary<string, string> { ["NEKODROP_USB_BA_WINDOW"] = window };
+    }
+
+    Process Spawn(string exe, IEnumerable<string> args, Action<string> onLine,
+                  IDictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo(exe)
         {
@@ -1319,6 +1386,8 @@ public sealed class Supervisor : IDisposable
             WorkingDirectory = Path.GetDirectoryName(exe)!,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
+        if (env is not null)
+            foreach (var (key, value) in env) psi.Environment[key] = value;
         var p = Process.Start(psi) ?? throw new InvalidOperationException("cannot start " + exe);
         p.ErrorDataReceived += (_, e) => { if (e.Data is not null) onLine(e.Data); };
         p.OutputDataReceived += (_, e) => { if (e.Data is not null) onLine(e.Data); };

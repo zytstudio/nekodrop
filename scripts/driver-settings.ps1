@@ -7,6 +7,10 @@ $DriverSettings = @{
   BuildDir     = "$repoRoot\driver\regproxy\build"
   PackageDir   = "$repoRoot\driver\regproxy\build\package"
   PackageFiles = @('winawdl_regproxy.inf', 'winawdl_regproxy.dll')
+  # The RTL8821CU USB dongle's package: WinUSB, not the register proxy. Bound by
+  # scripts\usb-card.ps1 -Take (or by the service), removed by give-card.ps1.
+  UsbInfName   = 'nekodrop_winusb.inf'
+  UsbDeviceIds = @('C820', 'C821')
   CertSubject  = 'CN=winairdrop driver signing (local test)'
   CertFile     = 'winairdrop-signing.cer'
   # The cards the radio drives (iwxradio/src/cards.h): Qu/QuZ CNVi, AX200, AX210 family.
@@ -17,17 +21,28 @@ $DriverSettings = @{
 function Get-PublishedPackages {
   $store = [xml](pnputil /enum-drivers /format xml | Out-String)
   $store.PnpUtil.Driver |
-    Where-Object { $_.OriginalName -eq $DriverSettings.InfName -and
+    Where-Object { ($_.OriginalName -eq $DriverSettings.InfName -or
+                    $_.OriginalName -eq $DriverSettings.UsbInfName) -and
                    $_.ProviderName -eq 'winairdrop project' } |
     ForEach-Object { $_.DriverName }
 }
 
 function Get-WifiCard {
-  Get-PnpDevice -PresentOnly |
+  $pci = Get-PnpDevice -PresentOnly |
     Where-Object {
       $id = $_.InstanceId
       $id -like 'PCI\VEN_8086&DEV_*' -and
         ($DriverSettings.DeviceIds | Where-Object { $id -like "PCI\VEN_8086&DEV_$_*" })
+    } |
+    Select-Object -First 1
+  if ($pci) { return $pci }
+  # The RTL8821CU USB dongle's device node (its MI_xx functions are not what a
+  # driver package binds to).
+  Get-PnpDevice -PresentOnly |
+    Where-Object {
+      $id = $_.InstanceId
+      $id -like 'USB\VID_0BDA&PID_*' -and $id -notmatch '&MI_' -and
+        ($DriverSettings.UsbDeviceIds | Where-Object { $id -like "USB\VID_0BDA&PID_$_*" })
     } |
     Select-Object -First 1
 }
@@ -35,7 +50,8 @@ function Get-WifiCard {
 function Get-WifiCardHardwareId {
   $card = Get-WifiCard
   if (-not $card) { return $null }
-  # The generic ID the INF matches, e.g. PCI\VEN_8086&DEV_43F0.
+  # The generic ID the INF matches, e.g. PCI\VEN_8086&DEV_43F0 or USB\VID_0BDA&PID_C820.
+  if ($card.InstanceId -like 'USB\*') { return ($card.InstanceId -split '\\')[1] }
   ($card.InstanceId -split '&SUBSYS')[0]
 }
 

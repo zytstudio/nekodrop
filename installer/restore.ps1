@@ -26,13 +26,16 @@ $ErrorActionPreference = 'Continue'
 # in step with iwxradio/src/cards.h, app/service/CardCatalog.cs,
 # driver/regproxy/winawdl_regproxy.inf, installer/report.ps1 and install.ps1.
 $SupportedIntelIds = @('43F0', 'A0F0', '02F0', '06F0', '34F0', '3DF0', '4DF0', '2723', '2725', '7A70', '7AF0', '51F0', '51F1', '54F0', '7F70')
-$KnownCatalogIds = @($SupportedIntelIds | ForEach-Object { "8086:$_" }) + @('8086:272B', '10EC:C852')
-$ProxyInfNames = @('winawdl_regproxy.inf', 'nekodrop-wlan.inf')
-$ProxyServices = @('WUDFRd', 'nekodrop-wlan')
+$KnownCatalogIds = @($SupportedIntelIds | ForEach-Object { "8086:$_" }) + @('8086:272B', '10EC:C852', '0BDA:C820', '0BDA:C821')
+$ProxyInfNames = @('winawdl_regproxy.inf', 'nekodrop-wlan.inf', 'nekodrop_winusb.inf')
+$ProxyServices = @('WUDFRd', 'nekodrop-wlan', 'WINUSB')
 $ProxyProvider = 'winairdrop project'
 $VendorProfiles = @{
   '8086' = @{ Name = 'Intel';            ProviderPatterns = @('Intel', 'Killer', 'Rivet Networks'); DownloadHint = 'intel.com or Windows Update' }
   '10EC' = @{ Name = 'Realtek';          ProviderPatterns = @('Realtek');                           DownloadHint = 'your PC maker or Windows Update' }
+  # A USB dongle's vendor id (Realtek's USB side), whose driver names the same
+  # provider as the PCI half: the RTL8821CU is bound back to it.
+  '0BDA' = @{ Name = 'Realtek';          ProviderPatterns = @('Realtek');                           DownloadHint = 'your PC maker or Windows Update' }
   '14C3' = @{ Name = 'MediaTek';         ProviderPatterns = @('MediaTek', 'AMD');                   DownloadHint = 'your PC maker or Windows Update' }
   '17CB' = @{ Name = 'Qualcomm';         ProviderPatterns = @('Qualcomm');                          DownloadHint = 'your PC maker or Windows Update' }
   '168C' = @{ Name = 'Qualcomm Atheros'; ProviderPatterns = @('Qualcomm', 'Atheros');               DownloadHint = 'your PC maker or Windows Update' }
@@ -51,6 +54,28 @@ function Get-PciVendorDevice([string]$InstanceId) {
     }
   }
   return $null
+}
+
+function Get-UsbVendorDevice([string]$InstanceId) {
+  $id = "$InstanceId".Trim().ToUpper()
+  if ($id -match '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})(?:&|\\|$)') {
+    $v = $Matches[1]; $d = $Matches[2]
+    return [pscustomobject]@{
+      Bus        = 'USB'
+      VendorId   = $v
+      DeviceId   = $d
+      Key        = ($v + ':' + $d)
+      HardwareId = "USB\VID_$v&PID_$d"
+    }
+  }
+  return $null
+}
+
+# The PCIe or USB identity of a device, whichever its instance ID names.
+function Get-DeviceVendor([string]$InstanceId) {
+  $pci = Get-PciVendorDevice $InstanceId
+  if ($pci) { return $pci }
+  return Get-UsbVendorDevice $InstanceId
 }
 
 function Get-VendorProfile([string]$VendorId) {
@@ -93,7 +118,7 @@ function Get-NekodropPublishedInfs($StoreDrivers) {
 
 function Test-NekodropInfContent([string]$Content) {
   if (-not $Content) { return $false }
-  return ($Content -match '(?i)winawdl_regproxy|nekodrop-wlan|winairdrop project')
+  return ($Content -match '(?i)winawdl_regproxy|nekodrop-wlan|nekodrop_winusb|winairdrop project')
 }
 
 function Test-DeviceBoundToNekodrop($Device, [string[]]$NekodropPublishedInfs) {
@@ -111,24 +136,32 @@ function Test-DeviceBoundToNekodrop($Device, [string[]]$NekodropPublishedInfs) {
   return ($isOurInf -or $isOurProvider)
 }
 
-# Picks the PCI Wi-Fi card to restore:
-#   1. any present PCI device currently bound to nekodrop's proxy or kernel
-#      driver (WUDFRd / nekodrop-wlan AND our published INF or provider, never
-#      unrelated UMDF devices such as sensors or HID);
+# Picks the Wi-Fi card to restore (PCIe or USB):
+#   1. any present device currently bound to nekodrop's proxy, kernel driver or
+#      WinUSB package (WUDFRd / nekodrop-wlan / WINUSB AND our published INF or
+#      provider, never unrelated UMDF devices such as sensors or HID);
 #   2. else any of the 15 supported Intel PCI IDs (identical to earlier builds);
-#   3. else any other known catalog PCI ID (such as Realtek 10EC:C852).
+#   3. else any other known catalog ID (Realtek 10EC:C852, the RTL8821CU USB
+#      dongle 0BDA:C820/C821).
+# A composite USB dongle's function nodes (MI_xx) are skipped: the driver
+# package is bound to the device, so that node's ID is the one to name.
 function Resolve-RestoreTargetDevice($Devices, [string[]]$NekodropPublishedInfs = @()) {
-  $pciDevs = @($Devices | Where-Object { $_ -and (Get-PciVendorDevice $_.InstanceId) })
-  foreach ($d in $pciDevs) {
+  $anyDevs = @($Devices | Where-Object {
+      if (-not $_) { return $false }
+      $id = Get-DeviceVendor $_.InstanceId
+      if (-not $id) { return $false }
+      return ($id.Bus -ne 'USB' -or "$($_.InstanceId)" -notmatch '&MI_')
+    })
+  foreach ($d in $anyDevs) {
     if (Test-DeviceBoundToNekodrop $d $NekodropPublishedInfs) { return $d }
   }
-  foreach ($d in $pciDevs) {
-    $pci = Get-PciVendorDevice $d.InstanceId
-    if ($pci.VendorId -eq '8086' -and ($SupportedIntelIds -contains $pci.DeviceId)) { return $d }
+  foreach ($d in $anyDevs) {
+    $id = Get-DeviceVendor $d.InstanceId
+    if ($id.Bus -ne 'USB' -and $id.VendorId -eq '8086' -and ($SupportedIntelIds -contains $id.DeviceId)) { return $d }
   }
-  foreach ($d in $pciDevs) {
-    $pci = Get-PciVendorDevice $d.InstanceId
-    if ($KnownCatalogIds -contains $pci.Key) { return $d }
+  foreach ($d in $anyDevs) {
+    $id = Get-DeviceVendor $d.InstanceId
+    if ($KnownCatalogIds -contains $id.Key) { return $d }
   }
   return $null
 }
@@ -260,11 +293,12 @@ if ($SelfTest) {
     (Drv 'oem32.inf' 'bcmwl63a.inf'        'Broadcom'                    'Net'          '06/01/2024 7.77.119.0'),
     (Drv 'oem40.inf' 'ibtusb.inf'          'Intel Corporation'           'Bluetooth'    '09/01/2025 99.0.0.1'),
     (Drv 'oem42.inf' 'winawdl_regproxy.inf' 'winairdrop project'         'WinAwdlRadio' '03/01/2026 0.1.0.1'),
+    (Drv 'oem44.inf' 'nekodrop_winusb.inf'   'winairdrop project'         'USBDevice'    '03/01/2026 0.1.0.1'),
     (Drv 'oem43.inf' 'nekodrop-wlan.inf'   'winairdrop project'          'Net'          '03/01/2026 99.9.9.9'),
     (Drv 'oem5.inf'  'sensors.inf'         'Microsoft'                   'Sensor'       '01/01/2024 10.0.19041.1')
   )
   $pubProxy = @(Get-NekodropPublishedInfs $store)
-  if ($pubProxy.Count -ne 2 -or $pubProxy -notcontains 'oem42.inf' -or $pubProxy -notcontains 'oem43.inf') {
+  if ($pubProxy.Count -ne 3 -or $pubProxy -notcontains 'oem42.inf' -or $pubProxy -notcontains 'oem44.inf' -or $pubProxy -notcontains 'oem43.inf') {
     $fail += "nekodrop published INFs wrong: $($pubProxy -join ', ')"
   }
 
@@ -294,6 +328,22 @@ if ($SelfTest) {
   if ($null -ne (Select-VendorInfPackage @() $intelOnlyStore '10EC' 'C:\Windows' { param($p) $false } { param($p) '' })) {
     $fail += 'Realtek fallback selected an Intel driver package'
   }
+
+  # 3b. The RTL8821CU USB dongle (0BDA:C820): selected while bound to nekodrop's
+  # WinUSB package, selected by its catalog ID once Realtek's driver is on it,
+  # its MI_02 function node never picked, and its vendor package found under 0BDA.
+  $usbBound = @((Dev 'USB\VID_0BDA&PID_C820\123456' 'WINUSB' 'oem44.inf' 'winairdrop project'))
+  if ($null -eq (Resolve-RestoreTargetDevice $usbBound $pubProxy)) { $fail += 'USB dongle bound to WINUSB was not selected' }
+  $usbVendor = @((Dev 'USB\VID_0BDA&PID_C820\123456' 'rtwlanu' 'oem20.inf' 'Realtek Semiconductor Corp.'))
+  if ($null -eq (Resolve-RestoreTargetDevice $usbVendor $pubProxy)) { $fail += 'USB dongle on Realtek''s driver was not selected' }
+  $usbFunction = @(
+    (Dev 'USB\VID_0BDA&PID_C820&REV_0200&MI_02\B&1' 'rtwlanu' 'oem20.inf' 'Realtek Semiconductor Corp.'),
+    (Dev 'USB\VID_0BDA&PID_8812\1' '' '' '')
+  )
+  if ($null -ne (Resolve-RestoreTargetDevice $usbFunction $pubProxy)) { $fail += 'a USB function node or an unsupported USB ID was selected' }
+  $usbPkg = Select-VendorInfPackage @() $store '0BDA' 'C:\Windows' { param($p) $false } { param($p) '' }
+  if ($usbPkg -ne 'C:\Windows\INF\oem21.inf') { $fail += "USB Realtek store fallback picked '$usbPkg', want oem21.inf" }
+  if ((Get-DeviceVendor 'USB\VID_0BDA&PID_C820&REV_0200&MI_02\B&1').HardwareId -ne 'USB\VID_0BDA&PID_C820') { $fail += 'USB hardware ID wrong' }
 
   # 4. Other known vendor profiles (MediaTek, Qualcomm, Broadcom) and unknown vendor -> $null.
   if ((Select-VendorInfPackage @() $store '14C3' 'C:\Windows' { param($p) $false } { param($p) '' }) -ne 'C:\Windows\INF\oem30.inf') { $fail += 'MediaTek fallback failed' }
@@ -387,9 +437,9 @@ try {
 } catch { }
 $nekodropInfs = @(Get-NekodropPublishedInfs $storeDrivers)
 
-$presentPci = @(Get-PnpDevice -PresentOnly | Where-Object { $_ -and (Get-PciVendorDevice $_.InstanceId) })
-$pciCandidates = foreach ($p in $presentPci) {
-  $pciInfo = Get-PciVendorDevice $p.InstanceId
+$presentCandidates = @(Get-PnpDevice -PresentOnly | Where-Object { $_ -and (Get-DeviceVendor $_.InstanceId) })
+$pciCandidates = foreach ($p in $presentCandidates) {
+  $pciInfo = Get-DeviceVendor $p.InstanceId
   $svcName = "$($p.Service)".Trim()
   $needProps = ($ProxyServices -contains $svcName) -or ($KnownCatalogIds -contains $pciInfo.Key) -or
                ("$($p.Class)" -in 'WinAwdlRadio', 'Net', 'Unknown', '')
@@ -410,7 +460,7 @@ $dev = Resolve-RestoreTargetDevice $pciCandidates $nekodropInfs
 if (-not $dev) {
   '   no Wi-Fi card nekodrop knows or holds is present; nothing to give back'
 } else {
-  $pci = Get-PciVendorDevice $dev.InstanceId
+  $pci = Get-DeviceVendor $dev.InstanceId
   $profile = Get-VendorProfile $pci.VendorId
   "   card: $($dev.InstanceId), now $($dev.FriendlyName) ($($dev.Status))"
   # Vendor package: the one nekodrop recorded before taking the card (validated
@@ -425,7 +475,13 @@ if (-not $dev) {
   }
   $vendor = Select-VendorInfPackage $recorded $storeDrivers $pci.VendorId $env:windir
   $bound = $false
-  if ($vendor) {
+  if ($pci.Bus -eq 'USB') {
+    # A WinUSB-bound USB dongle cannot be handed to the vendor's INF in place:
+    # that package matches the composite's Wi-Fi function (MI_02), which only
+    # exists once Windows' own composite driver is back. Removing nekodrop's
+    # package and re-detecting below is what does it (verified on hardware).
+    "   USB dongle: removing nekodrop's WinUSB package and re-detecting it"
+  } elseif ($vendor) {
     "   binding $vendor"
     $hwid = $pci.HardwareId
     # INSTALLFLAG_FORCE: the vendor's INF ranks higher anyway, but the proxy is bound now.
@@ -504,11 +560,11 @@ $after = if ($dev) {
 }
 if (-not $after -and $dev) {
   $after = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object {
-    $pci -and (Get-PciVendorDevice $_.InstanceId) -and (Get-PciVendorDevice $_.InstanceId).Key -eq $pci.Key
+    (Get-DeviceVendor $_.InstanceId) -and (Get-DeviceVendor $_.InstanceId).Key -eq $pci.Key
   } | Select-Object -First 1
 }
 if ($after) {
-  $afterPci = Get-PciVendorDevice $after.InstanceId
+  $afterPci = Get-DeviceVendor $after.InstanceId
   $afterProfile = Get-VendorProfile $(if ($afterPci) { $afterPci.VendorId } else { '' })
   $service = (Get-PnpDeviceProperty -InstanceId $after.InstanceId -KeyName DEVPKEY_Device_Service -ErrorAction SilentlyContinue).Data
   "Wi-Fi card: $($after.FriendlyName), driver service $service, status $($after.Status)"

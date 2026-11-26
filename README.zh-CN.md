@@ -30,7 +30,7 @@
 
 - **双向 53 MB/s**：Intel AX201 上 846 MB 文件约 16 秒传完，0 丢包（[详细数据](#速度)）。
 - **AirDrop 时照常上网**：一张网卡同时连 Wi-Fi 和跑 AirDrop。
-- **用你现有的网卡**：Intel AX200 / AX201 / AX210 / AX211 / 9560、Realtek RTL8852CE、MediaTek MT7902 / MT7921 / MT7922，不用买 USB 网卡（[全部网卡](#支持的网卡)）。
+- **用你现有的网卡**：Intel AX200 / AX201 / AX210 / AX211 / 9560、Realtek RTL8852CE 或 RTL8821CU USB 网卡、MediaTek MT7902 / MT7921 / MT7922，PCIe 网卡无需额外购买 USB 网卡（[全部网卡](#支持的网卡)）。
 - **像 Mac 一样用**：iPhone、iPad、Mac 的 AirDrop 列表里直接出现你的电脑；资源管理器右键 **用 nekodrop 发送**，或用 Windows 分享面板。
 - **仅限联系人**（实验性）：登录 Apple ID 或导入 Mac 证书（[怎么用](docs/USAGE.zh-CN.md#仅限联系人apple-id实验性)）。
 - **装上就不用管**：一个安装包、自动更新、服务自动恢复，出问题一键回退到 Windows 自带 Wi-Fi。
@@ -53,6 +53,7 @@ Intel AX201、Windows 11、`v2.2.9+`，开启高吞吐模式（HE80 + MTU 1500�
 | **Intel** | AX201 · AX200 · AX210 · AX211 · AX411 / Killer AX1690 · 9560 | 实测可用（AX201 作者实测，其余为用户反馈） |
 | **Intel** | BE200（Wi-Fi 7） | 实验性 |
 | **Realtek** | RTL8852CE | 用户实测，约 24.5 MB/s（按需接管） |
+| **Realtek** | RTL8821CU USB 网卡（`0BDA:C820`/`C821`） | 实验性：已验证上电、接收与注入；网卡会一直归 nekodrop 驱动 |
 | **MediaTek** | MT7902 | 双向实测，可同时连 Wi-Fi |
 | **MediaTek** | MT7922 / RZ616 · MT7921 / RZ608 | 实验性（MT7922 双向实测） |
 

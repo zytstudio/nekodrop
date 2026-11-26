@@ -36,8 +36,11 @@ if (args.Contains("--give-back"))
 if (args.Contains("--status"))
 {
     var card = Card.Find();
+    // A USB dongle's instance ID ends in its serial (often its MAC): print the
+    // hardware ID instead, as the service log does.
+    var shown = card is null ? "" : card.Profile.Bus == AdapterBus.Usb ? card.Profile.HardwareId : card.InstanceId;
     Console.WriteLine(card is null ? "card: none found"
-        : $"card: {card.InstanceId}{Environment.NewLine}  driver service {card.Service}, INF {card.InfPath}, taken by nekodrop: {Card.TakenByProxy(card)}");
+        : $"card: {shown}{Environment.NewLine}  driver service {card.Service}, INF {card.InfPath}, taken by nekodrop: {Card.TakenByProxy(card)}");
     if (card is not null)
     {
         var p = card.Profile;
@@ -47,7 +50,7 @@ if (args.Contains("--status"))
         // Whether the bound driver looks like the vendor's own (only informative:
         // the service records any non-proxy driver to give the card back to).
         Console.WriteLine($"  bound driver provider \"{card.Provider}\": " +
-                          (Card.BoundToProxy(card) ? "nekodrop's register proxy"
+                          (Card.BoundToProxy(card) ? (p.Bus == AdapterBus.Usb ? "nekodrop's WinUSB driver" : "nekodrop's register proxy")
                            : CardCatalog.IsVendorProviderMatch(p, card.Provider) ? $"{p.VendorName}'s driver" : "not recognised as the vendor's driver"));
     }
     var net = Wlan.Current(out var why, readKey: false);

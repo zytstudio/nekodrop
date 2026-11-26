@@ -591,3 +591,19 @@ patch_once(
     '}\n',
     'io_win.c batch up to 32 RX frames per pcap_dispatch',
 )
+# 6. radio_client.c: a slow first bring-up must not lose the greeting.
+# The daemon greets only once its card is up. Intel and the RTL8852CE are up in
+# well under a second, but the RTL8821CU's USB bring-up writes ~12k registers
+# one vendor control transfer at a time: ~40 s measured on hardware. The old
+# 10 s greeting timeout made awdld give up ("radio daemon did not greet with
+# protocol version 3", "could not initialize: is winawdl_radio running?") on
+# every start, so AirDrop never began. Nothing waits longer when the daemon is
+# quick; only this card uses the extra time.
+radio_client_c = root / 'awdl' / 'win' / 'radio_client.c'
+patch_once(
+    radio_client_c,
+    'nekodrop (usb) greeting timeout',
+    '#define HELLO_TIMEOUT_MS 10000\n',
+    '#define HELLO_TIMEOUT_MS 180000 /* nekodrop (usb) greeting timeout: a USB 8821CU takes ~40 s to boot */\n',
+    'radio_client.c greeting timeout',
+)

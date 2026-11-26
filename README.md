@@ -30,7 +30,7 @@
 
 - **53 MB/s both ways.** An 846 MB file in about 16 s on an Intel AX201, 0 drops ([details](#speed)).
 - **Your Wi-Fi stays online.** One card runs your Wi-Fi connection and AirDrop at the same time.
-- **The card you already have.** Intel AX200 / AX201 / AX210 / AX211 / 9560, Realtek RTL8852CE, MediaTek MT7902 / MT7921 / MT7922. No dongle ([all cards](#supported-cards)).
+- **The card you already have.** Intel AX200 / AX201 / AX210 / AX211 / 9560, Realtek RTL8852CE or an RTL8821CU USB dongle, MediaTek MT7902 / MT7921 / MT7922. No dongle needed for the PCIe cards ([all cards](#supported-cards)).
 - **Works like a Mac.** iPhone, iPad and Mac see your PC in the AirDrop sheet. Send with Explorer's right-click **Send with nekodrop** or the Windows Share sheet.
 - **Contacts Only** (experimental) with your Apple ID or a Mac's certificate ([how](docs/USAGE.md#contacts-only-apple-id-experimental)).
 - **Install and forget.** One installer, auto-updates, a self-healing service and a one-click restore back to Windows Wi-Fi.
@@ -53,6 +53,7 @@ How we measure: [docs/TESTING.md](docs/TESTING.md).
 | **Intel** | AX201 · AX200 · AX210 · AX211 · AX411 / Killer AX1690 · 9560 | Tested (AX201 by the author, others by users) |
 | **Intel** | BE200 (Wi-Fi 7) | Experimental |
 | **Realtek** | RTL8852CE | User-tested, ~24.5 MB/s (on demand) |
+| **Realtek** | RTL8821CU USB dongle (`0BDA:C820`/`C821`) | Experimental: bring-up, RX and injection verified; the dongle stays on nekodrop's driver |
 | **MediaTek** | MT7902 | Tested both ways, Wi-Fi at the same time |
 | **MediaTek** | MT7922 / RZ616 · MT7921 / RZ608 | Experimental (MT7922 tested both ways) |
 

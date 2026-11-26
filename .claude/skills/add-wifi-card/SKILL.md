@@ -57,6 +57,17 @@ Pick one:
   source moved (`scripts/patch-radio-rtl.py`).
 - **A new port** → its own folder (`mtradio/`, `mtkradio/`), CMake + Ninja + MSVC `/MT`, reusing
   `iwxradio/src/{proxy,plat_win,pipe_server}` by relative path.
+- **A USB card** (no BAR, so no register proxy) → the RTL8821CU is the worked example (`usbradio/`,
+  `driver/winusb/`): the *same* winawdl radio source, built a second time with `-DNEKODROP_USB`
+  (`scripts/patch-radio-usb.py` adds `--usb VID:PID`, a `Doorbell` in place of `PcieTransport`, and a
+  1SS rate for a 1T1R part), plus a WinUSB INF (`Include=winusb.inf, Needs=WINUSB.NT`) bound to the
+  whole device. `usbradio/src/nekodrop_usb_session.h` owns libusb: `find_wifi_interface` (a composite
+  dongle's Wi-Fi is `MI_02`, never 0), `claim_interface_reset_reopen`, `CreateRadio`, and the teardown
+  order through devourer's `DeviceSession` (radio before context; getting it backwards crashes).
+  A WinUSB device cannot also be a Windows network adapter: the dongle is taken for good
+  (`AdapterCapabilities.HandsBackCard = false`) and only restore/uninstall rebinds the vendor driver.
+  Inf2Cat needs elevation on Windows 11 26H1 and cannot read an INF under a directory named `driver`
+  (stage it in `build\`), and never copy `winusb.inf` beside the INF.
 
 What the service and the diagnostic report expect from any daemon (they parse these lines):
 

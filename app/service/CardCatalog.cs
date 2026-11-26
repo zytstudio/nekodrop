@@ -8,6 +8,9 @@ public enum RadioBackendKind
     Iwx,
     /// <summary>winawdl's devourer (Realtek RTL8852CE): monitor and inject only, no station.</summary>
     Devourer,
+    /// <summary>nekodrop-radio-usb: the same winawdl radio over devourer's libusb transport, for the
+    /// Realtek RTL8821CU USB dongle (monitor and inject only, no station).</summary>
+    RtlUsb,
     /// <summary>nekodrop-radio-mt: the MediaTek MT7902 driver ported from Linux mt76 (mtradio/): sniffer, inject,
     /// AWDL peer stations, and a 5 GHz Wi-Fi station on the host (the card moves between the router and AWDL).</summary>
     Mt76,
@@ -15,6 +18,13 @@ public enum RadioBackendKind
     /// AWDL monitor/inject and a 5 GHz Wi-Fi station on the host (experimental Concurrent mode,
     /// time-sharing the card's single channel with AWDL).</summary>
     MtkRadio,
+}
+
+/// <summary>Which bus a card sits on: a PCIe device the register proxy maps, or a USB device libusb drives.</summary>
+public enum AdapterBus
+{
+    Pci,
+    Usb,
 }
 
 /// <summary>
@@ -29,8 +39,11 @@ public enum RadioBackendKind
 /// <param name="MinBarBytes">the smallest register BAR the register proxy must map (driver/regproxy MIN_BAR_LEN)</param>
 /// <param name="StationOn24GHz">the radio's station joins 2.4 GHz networks too; without it a dual-band
 /// network is joined at its 5 GHz access point</param>
+/// <param name="HandsBackCard">the service gives the card back to the vendor's driver when AirDrop is
+/// off; false for a USB dongle the user dedicated to nekodrop (restore/uninstall still returns it)</param>
 public sealed record AdapterCapabilities(bool SupportsConcurrentWifi, bool SupportsFastSend, bool SupportsAggregate,
-                                         bool SupportsKernelDriver, uint MinBarBytes, bool StationOn24GHz = true)
+                                         bool SupportsKernelDriver, uint MinBarBytes, bool StationOn24GHz = true,
+                                         bool HandsBackCard = true)
 {
     /// <summary>
     /// The Intel cards nekodrop runs today. Also what the service assumes before
@@ -55,13 +68,23 @@ public sealed record AdapterCapabilities(bool SupportsConcurrentWifi, bool Suppo
 /// <param name="ProxyProvider">the Provider in the proxy's INF: how it is told apart once Windows renamed it oemNN.inf</param>
 /// <param name="VendorProviderPatterns">substrings of the vendor driver's ProviderName (OEM repackages included)</param>
 /// <param name="Active">false: listed for diagnostics and the self-test only, never taken</param>
+/// <param name="Bus">which bus the card is on: PCIe (register proxy) or USB (libusb over WinUSB)</param>
+/// <param name="BindId">the hardware ID the driver package binds, when that is not the generic
+/// one: a composite USB dongle's Wi-Fi function ("USB\VID_0BDA&amp;PID_C820&amp;MI_02"), never its
+/// Bluetooth sibling or the composite parent</param>
 public sealed record AdapterProfile(string VendorId, string DeviceId, string VendorName, string FamilyName,
                                     RadioBackendKind Backend, AdapterCapabilities Capabilities,
                                     string ProxyInfName, string ProxyService, string ProxyProvider,
-                                    string[] VendorProviderPatterns, bool Active, string? RadioFamily = null)
+                                    string[] VendorProviderPatterns, bool Active, string? RadioFamily = null,
+                                    AdapterBus Bus = AdapterBus.Pci, string? BindId = null)
 {
-    /// <summary>The hardware ID Windows binds a driver to (UpdateDriverForPlugAndPlayDevices).</summary>
-    public string HardwareId => $"PCI\\VEN_{VendorId}&DEV_{DeviceId}";
+    /// <summary>The hardware ID that identifies the device (PCI or USB, without a function).</summary>
+    public string HardwareId => Bus == AdapterBus.Usb
+        ? $"USB\\VID_{VendorId}&PID_{DeviceId}"
+        : $"PCI\\VEN_{VendorId}&DEV_{DeviceId}";
+
+    /// <summary>The hardware ID a driver is bound to (UpdateDriverForPlugAndPlayDevices).</summary>
+    public string BindTarget => BindId ?? HardwareId;
 
     /// <summary>The proxy INF's name without extension, as found inside a renamed oemNN.inf (issue #12).</summary>
     public string ProxyInfStem => Path.GetFileNameWithoutExtension(ProxyInfName);
@@ -84,6 +107,11 @@ public static class CardCatalog
     const string ProxyInf = "winawdl_regproxy.inf";
     const string ProxyService = "WUDFRd";
     const string ProxyProvider = "winairdrop project";
+    // The USB dongle's driver: Microsoft's in-box WinUSB, bound through
+    // driver/winusb's INF, because libusb (devourer) talks to the chip itself.
+    // There is no BAR to map and no reflector service.
+    const string WinUsbInf = "nekodrop_winusb.inf";
+    const string WinUsbService = "WINUSB";
     // Killer (Rivet Networks) cards are Intel chips with Intel's driver repackaged.
     static readonly string[] IntelProviders = ["Intel", "Killer", "Rivet Networks"];
     // Intel BE200 (Bz/Gl, Wi-Fi 7): experimental MLD station (Concurrent &
@@ -102,6 +130,19 @@ public static class CardCatalog
     static readonly AdapterCapabilities MtkRadioCaps = new(true, false, false, false, 0x100000, StationOn24GHz: false);
     static readonly AdapterCapabilities MtkRadioOnDemandCaps = new(false, false, false, false, 0x100000, StationOn24GHz: false);
     static readonly string[] MtkRadioProviders = ["MediaTek", "AMD"];
+
+    /* The RTL8821CU is a USB dongle: libusb over WinUSB, so no register BAR
+     * (MinBarBytes is unused), no station, and no handing the card back — the
+     * user dedicated it to nekodrop, which binds it to WinUSB at the first take
+     * and keeps it until restore/uninstall puts Realtek's driver back. */
+    static readonly AdapterCapabilities RtlUsbCaps =
+        new(false, false, false, false, 0x1000, StationOn24GHz: false, HandsBackCard: false);
+
+    /// <summary>USB profiles: the dongle's Wi-Fi function, its radio, and WinUSB's INF/service.</summary>
+    static AdapterProfile RtlUsb(string device) =>
+        new("0BDA", device, "Realtek", "RTL8821CU (USB, experimental)", RadioBackendKind.RtlUsb, RtlUsbCaps,
+            WinUsbInf, WinUsbService, ProxyProvider, ["Realtek"], Active: true, Bus: AdapterBus.Usb,
+            BindId: $"USB\\VID_0BDA&PID_{device}&MI_02");
 
     static AdapterProfile Intel(string device, string family) =>
         new("8086", device, "Intel", family, RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault,
@@ -132,6 +173,11 @@ public static class CardCatalog
         new AdapterProfile("10EC", "C852", "Realtek", "RTL8852CE", RadioBackendKind.Devourer,
             new AdapterCapabilities(false, false, false, false, 0x10000),
             ProxyInf, ProxyService, ProxyProvider, ["Realtek"], Active: true),
+        // Realtek RTL8821CU (USB, 1T1R + BT): the same winawdl radio as the
+        // RTL8852CE, over devourer's libusb transport (nekodrop-radio-usb.exe)
+        // instead of the register proxy. Taken once, kept: HandsBackCard is
+        // false (see RtlUsbCaps). driver\winusb's INF lists these two IDs.
+        RtlUsb("C820"), RtlUsb("C821"),
         // MediaTek MT7902 (nekodrop-radio-mt.exe, ported from Linux mt76/mt7921):
         // Concurrent with a 5 GHz network (the radio's host-side station shares the
         // card's one channel with AWDL); 1 MiB BAR0.
@@ -154,20 +200,32 @@ public static class CardCatalog
     public static readonly IReadOnlyList<AdapterProfile> ActiveProfiles = AllProfiles.Where(p => p.Active).ToArray();
 
     /// <summary>
-    /// Reads the vendor and device IDs from a PnP instance or hardware ID
-    /// ("PCI\VEN_8086&amp;DEV_43F0&amp;SUBSYS_00748086&amp;REV_00\3&amp;11583659&amp;0&amp;A3"),
-    /// in any case. The device ID must end at '&amp;', '\' or the end, so
-    /// "DEV_43F01" is not "DEV_43F0".
+    /// Reads the bus, vendor and device IDs from a PnP instance or hardware ID
+    /// ("PCI\VEN_8086&amp;DEV_43F0&amp;SUBSYS_00748086&amp;REV_00\3&amp;11583659&amp;0&amp;A3",
+    /// "USB\VID_0BDA&amp;PID_C820&amp;REV_0200&amp;MI_02\B&amp;1D92DF5B&amp;0&amp;0002"), in any
+    /// case. The device ID must end at '&amp;', '\' or the end, so "DEV_43F01" is not
+    /// "DEV_43F0" and "PID_C8201" is not "PID_C820".
     /// </summary>
-    public static bool TryParsePciId(string instanceId, out string vendorId, out string deviceId)
+    public static bool TryParseId(string instanceId, out AdapterBus bus, out string vendorId, out string deviceId)
+    {
+        var s = instanceId ?? "";
+        bus = AdapterBus.Pci;
+        if (ParseIds(s, "PCI\\VEN_", "&DEV_", out vendorId, out deviceId)) return true;
+        if (!ParseIds(s, "USB\\VID_", "&PID_", out vendorId, out deviceId)) return false;
+        bus = AdapterBus.Usb;
+        return true;
+    }
+
+    static bool ParseIds(string s, string vendorPrefix, string deviceMarker, out string vendorId, out string deviceId)
     {
         vendorId = deviceId = "";
-        const string pci = "PCI\\VEN_", dev = "&DEV_";
-        var s = instanceId ?? "";
-        if (s.Length < pci.Length + 4 + dev.Length + 4 || !s.StartsWith(pci, StringComparison.OrdinalIgnoreCase)) return false;
-        var v = s.Substring(pci.Length, 4);
-        if (!IsHex4(v) || string.Compare(s, pci.Length + 4, dev, 0, dev.Length, StringComparison.OrdinalIgnoreCase) != 0) return false;
-        var at = pci.Length + 4 + dev.Length;
+        var marker = vendorPrefix.Length + 4;
+        if (s.Length < marker + deviceMarker.Length + 4 || !s.StartsWith(vendorPrefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var v = s.Substring(vendorPrefix.Length, 4);
+        if (!IsHex4(v) || string.Compare(s, marker, deviceMarker, 0, deviceMarker.Length, StringComparison.OrdinalIgnoreCase) != 0)
+            return false;
+        var at = marker + deviceMarker.Length;
         var d = s.Substring(at, 4);
         if (!IsHex4(d)) return false;
         if (s.Length > at + 4 && s[at + 4] is not ('&' or '\\')) return false;
@@ -176,16 +234,45 @@ public static class CardCatalog
         return true;
     }
 
+    /// <summary>The PCI half of <see cref="TryParseId"/> (a USB ID is not a PCI ID).</summary>
+    public static bool TryParsePciId(string instanceId, out string vendorId, out string deviceId) =>
+        TryParseId(instanceId, out var bus, out vendorId, out deviceId) && bus == AdapterBus.Pci;
+
+    /// <summary>
+    /// Whether an instance ID names a USB function of a composite device
+    /// ("USB\VID_0BDA&amp;PID_C820&amp;MI_02\...") rather than the device node a driver
+    /// binds to ("USB\VID_0BDA&amp;PID_C820\..."). The dongle's WinUSB package is bound
+    /// to the device, and that node is the one whose state says whether it is taken.
+    /// </summary>
+    public static bool IsUsbFunction(string instanceId)
+    {
+        var s = instanceId ?? "";
+        const string prefix = "USB\\VID_";
+        const string marker = "&PID_";
+        var at = prefix.Length + 4 + marker.Length + 4;
+        return s.Length > at && s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+               string.Compare(s, prefix.Length + 4, marker, 0, marker.Length, StringComparison.OrdinalIgnoreCase) == 0 &&
+               s[at] == '&';
+    }
+
     static bool IsHex4(string s) => s.Length == 4 && s.All(Uri.IsHexDigit);
 
     /// <summary>The profile of a card the service takes, or null (unknown, Ethernet, or listed but not active).</summary>
     public static AdapterProfile? MatchActive(string instanceId) => Classify(instanceId) is { Active: true } p ? p : null;
 
-    /// <summary>Any listed profile, active or not (diagnostics and the self-test).</summary>
-    public static AdapterProfile? Classify(string instanceId) =>
-        TryParsePciId(instanceId, out var v, out var d)
-            ? AllProfiles.FirstOrDefault(p => p.VendorId == v && p.DeviceId == d)
-            : null;
+    /// <summary>
+    /// Any listed profile, active or not (diagnostics and the self-test). A profile
+    /// bound to one USB function matches only that function's node: the dongle's
+    /// Bluetooth sibling (MI_00/01) and its composite parent are not the card.
+    /// </summary>
+    public static AdapterProfile? Classify(string instanceId)
+    {
+        if (!TryParseId(instanceId, out var bus, out var v, out var d)) return null;
+        var profile = AllProfiles.FirstOrDefault(p => p.Bus == bus && p.VendorId == v && p.DeviceId == d);
+        if (profile?.BindId is { } bind && !instanceId.StartsWith(bind, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return profile;
+    }
 
     /// <summary>
     /// The mode the card can run: one whose radio has no station cannot keep
@@ -231,22 +318,28 @@ public static class CardCatalog
         new("so", "Intel AX211 / AX411 (So, CNVi)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
         new("be200", "Intel BE200 (experimental)", "8086", RadioBackendKind.Iwx, Be200Caps, IntelProviders),
         new("rtl8852ce", "Realtek RTL8852CE", "10EC", RadioBackendKind.Devourer, RealtekCaps, ["Realtek"]),
+        new("rtl8821cu", "Realtek RTL8821CU (USB, experimental)", "0BDA", RadioBackendKind.RtlUsb, RtlUsbCaps, ["Realtek"]),
         new("mt7902", "MediaTek MT7902", "14C3", RadioBackendKind.Mt76, MediaTekCaps, MediaTekProviders),
         new("mt7922", "MediaTek MT7922 / MT7921 (RZ616 / RZ608)", "14C3", RadioBackendKind.MtkRadio, MtkRadioCaps, MtkRadioProviders),
     ];
 
     /// <summary>
     /// A profile for a card the user matched to a model by hand, or null when
-    /// the model is unknown or the card's vendor is not the model's.
+    /// the model is unknown, the card's vendor is not the model's, or the card is
+    /// not on the bus the model's radio drives (a USB dongle as an Intel model).
     /// </summary>
     public static AdapterProfile? ManualProfile(string instanceOrHardwareId, string modelKey)
     {
-        if (!TryParsePciId(instanceOrHardwareId, out var v, out var d)) return null;
+        if (!TryParseId(instanceOrHardwareId, out var bus, out var v, out var d)) return null;
         var m = ManualModels.FirstOrDefault(x => x.Key == modelKey);
         if (m is null || m.VendorId != v) return null;
+        if ((m.Backend == RadioBackendKind.RtlUsb ? AdapterBus.Usb : AdapterBus.Pci) != bus) return null;
+        var usb = bus == AdapterBus.Usb;
         return new AdapterProfile(v, d, v switch { "8086" => "Intel", "14C3" => "MediaTek", _ => "Realtek" }, m.Name + " (chosen in settings)", m.Backend,
-                                  m.Capabilities, ProxyInf, ProxyService, ProxyProvider, m.VendorProviderPatterns,
-                                  Active: true, RadioFamily: m.Backend == RadioBackendKind.Iwx ? m.Key : null);
+                                  m.Capabilities, usb ? WinUsbInf : ProxyInf, usb ? WinUsbService : ProxyService, ProxyProvider,
+                                  m.VendorProviderPatterns,
+                                  Active: true, RadioFamily: m.Backend == RadioBackendKind.Iwx ? m.Key : null, Bus: bus,
+                                  BindId: usb ? $"USB\\VID_{v}&PID_{d}&MI_02" : null);
     }
 
     /// <summary>
@@ -267,11 +360,12 @@ public static class CardCatalog
         void Check(bool ok, string what) { if (!ok) fail.Add(what); }
 
         // The 15 Intel IDs the service took before the catalog (Card.DeviceIds, 0.1.20)
-        // plus Realtek RTL8852CE (10EC:C852), MediaTek MT7902 (14C3:7902), and
-        // MediaTek MT7922/MT7921 (14C3:0616, 7922, 7961, 0608) = 21 active profiles.
+        // plus Realtek RTL8852CE (10EC:C852), the Realtek RTL8821CU USB dongle
+        // (0BDA:C820, C821), MediaTek MT7902 (14C3:7902), and MediaTek
+        // MT7922/MT7921 (14C3:0616, 7922, 7961, 0608) = 24 active profiles.
         string[] intel = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0",
                           "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
-        Check(ActiveProfiles.Count == intel.Length + 7, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 7}");
+        Check(ActiveProfiles.Count == intel.Length + 9, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 9}");
         Check(AllProfiles.Count == ActiveProfiles.Count, $"{AllProfiles.Count} total profiles, expected {ActiveProfiles.Count}");
         foreach (var dev in intel)
         {
@@ -300,6 +394,15 @@ public static class CardCatalog
         Check(!TryParsePciId("PCI\\VEN_80G6&DEV_43F0", out _, out _), "non-hex vendor ID parsed");
         Check(!TryParsePciId("PCI\\VEN_8086&SUBSYS_00748086", out _, out _), "ID without DEV_ parsed");
         Check(!TryParsePciId("USB\\VID_0BDA&PID_8812\\1", out _, out _), "USB ID parsed");
+        Check(TryParseId("USB\\VID_0BDA&PID_8812\\1", out var bus1, out var uv1, out var ud1) &&
+              bus1 == AdapterBus.Usb && uv1 == "0BDA" && ud1 == "8812", "USB ID not parsed by TryParseId");
+        Check(TryParseId("USB\\VID_0BDA&PID_C820&REV_0200&MI_02\\B&1D92DF5B&0&0002", out var bus2, out _, out var ud2) &&
+              bus2 == AdapterBus.Usb && ud2 == "C820", "USB function instance ID not parsed");
+        Check(IsUsbFunction("USB\\VID_0BDA&PID_C820&REV_0200&MI_02\\B&1D92DF5B&0&0002"), "USB function not recognized");
+        Check(!IsUsbFunction("USB\\VID_0BDA&PID_C820\\123456"), "USB device node taken for a function");
+        Check(!TryParseId("USB\\VID_0BDA&PID_C8201\\1", out _, out _, out _), "five-digit USB product ID parsed");
+        Check(TryParseId("PCI\\VEN_10EC&DEV_C852\\4&1", out var bus3, out _, out _) && bus3 == AdapterBus.Pci,
+              "PCI ID not parsed by TryParseId");
         Check(!TryParsePciId("", out _, out _), "empty ID parsed");
 
         // Built-in Realtek RTL8852CE: active, Devourer backend, forced to on demand.
@@ -322,6 +425,54 @@ public static class CardCatalog
             Check(!IsVendorProviderMatch(r, "Intel"), "Intel provider matched as Realtek's");
             Check(!IsVendorProviderMatch(r, "winairdrop project"), "proxy provider matched as Realtek's");
         }
+
+        // Realtek RTL8821CU (0BDA:C820): a USB dongle driven by devourer over
+        // libusb, bound on its Wi-Fi FUNCTION (MI_02) so the composite parent and
+        // the Bluetooth function stay on their own drivers. Active, forced to on
+        // demand, never handed back, launched on 149 with 20/40 MHz.
+        foreach (var pid in new[] { "C820", "C821" })
+        {
+            var usbId = $"USB\\VID_0BDA&PID_{pid}&MI_02\\B&1D92DF5B&0&0002";
+            var usb = MatchActive(usbId);
+            if (usb is null) { fail.Add($"0BDA:{pid} is not active"); continue; }
+            Check(Classify(usbId) == usb, $"0BDA:{pid} Classify and MatchActive disagree");
+            Check(MatchActive($"usb\\vid_0bda&pid_{pid.ToLowerInvariant()}&mi_02\\b&1") == usb,
+                  $"lower-case 0BDA:{pid} Wi-Fi function not taken");
+            Check(usb.HardwareId == $"USB\\VID_0BDA&PID_{pid}", $"0BDA:{pid} hardware ID {usb.HardwareId}");
+            Check(usb.BindTarget == $"USB\\VID_0BDA&PID_{pid}&MI_02", $"0BDA:{pid} bind target {usb.BindTarget}");
+            // The composite parent and the Bluetooth function are not the card.
+            Check(MatchActive($"USB\\VID_0BDA&PID_{pid}\\123456") is null, $"0BDA:{pid} composite parent taken");
+            Check(MatchActive($"USB\\VID_0BDA&PID_{pid}&MI_00\\B&1") is null, $"0BDA:{pid} Bluetooth function taken");
+            Check(usb.Bus == AdapterBus.Usb && usb.VendorName == "Realtek" && usb.Backend == RadioBackendKind.RtlUsb,
+                  $"0BDA:{pid} bus {usb.Bus} vendor {usb.VendorName} backend {usb.Backend}");
+            Check(!usb.Capabilities.SupportsConcurrentWifi && !usb.Capabilities.SupportsFastSend &&
+                  !usb.Capabilities.SupportsAggregate && !usb.Capabilities.SupportsKernelDriver &&
+                  !usb.Capabilities.StationOn24GHz && !usb.Capabilities.HandsBackCard,
+                  $"0BDA:{pid} capabilities");
+            Check(usb.ProxyInfName == "nekodrop_winusb.inf" && usb.ProxyService == "WINUSB" &&
+                  usb.ProxyProvider == "winairdrop project", $"0BDA:{pid} driver package {usb.ProxyInfName}");
+            Check(EffectiveMode(NetMode.Concurrent, usb.Capabilities) == NetMode.OnDemand,
+                  $"0BDA:{pid} Concurrent not forced to OnDemand");
+            Check(EffectiveMode(NetMode.OnDemand, usb.Capabilities) == NetMode.OnDemand, $"0BDA:{pid} OnDemand changed");
+            Check(IsVendorProviderMatch(usb, "Realtek Semiconductor Corp."), $"0BDA:{pid} Realtek provider not matched");
+            Check(!IsVendorProviderMatch(usb, "winairdrop project"), $"0BDA:{pid} proxy provider matched as Realtek's");
+            Check(SameLaunch(BuildRadioLaunch(usb, 6, false, "JP", @"C:\run\sta.conf", true, true),
+                             "nekodrop-radio-usb.exe", "6", "--width", "20", "--usb", $"0bda:{pid.ToLowerInvariant()}"),
+                  $"0BDA:{pid} ch 6 launch args (all Intel flags stripped)");
+            Check(SameLaunch(BuildRadioLaunch(usb, 149, false, "", null, false, false, btCoexBalanced: true),
+                             "nekodrop-radio-usb.exe", "149", "--width", "20", "--usb", $"0bda:{pid.ToLowerInvariant()}"),
+                  $"0BDA:{pid} ch 149 launch args (20 MHz)");
+        }
+        var musb = ManualProfile("USB\\VID_0BDA&PID_C820", "rtl8821cu");
+        if (musb is null) fail.Add("manual rtl8821cu on a 0BDA dongle refused");
+        else
+        {
+            Check(musb is { Backend: RadioBackendKind.RtlUsb, RadioFamily: null, Bus: AdapterBus.Usb } &&
+                  musb.ProxyService == "WINUSB" && !musb.Capabilities.HandsBackCard &&
+                  musb.BindTarget == "USB\\VID_0BDA&PID_C820&MI_02", "manual rtl8821cu profile");
+        }
+        Check(ManualProfile("USB\\VID_0BDA&PID_C820", "qu") is null, "an Intel model accepted for a USB dongle");
+        Check(ManualProfile("PCI\\VEN_10EC&DEV_C852", "rtl8821cu") is null, "a USB model accepted for a PCIe card");
 
         // Radio launch planning for Intel (Iwx) and Realtek (Devourer).
         static bool SameLaunch(RadioLaunch got, string exe, params string[] args) =>
@@ -525,7 +676,8 @@ public static class CardCatalog
                   p.ProxyProvider != "" && p.VendorProviderPatterns.Length > 0 && p.VendorProviderPatterns.All(s => s != ""),
                   $"{key}: empty field");
             Check(p.Capabilities.MinBarBytes > 0, $"{key}: no minimum BAR");
-            Check(TryParsePciId(p.HardwareId, out var hv, out var hd) && hv == p.VendorId && hd == p.DeviceId,
+            Check(TryParseId(p.HardwareId, out var hv, out var hvid, out var hdid) && hv == p.Bus &&
+                  hvid == p.VendorId && hdid == p.DeviceId,
                   $"{key}: hardware ID {p.HardwareId} does not parse back");
         }
         return fail;

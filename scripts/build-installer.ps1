@@ -1,11 +1,13 @@
 # Builds every part of nekodrop, stages it in build\stage, and makes
 # build\nekodrop-<version>-setup.exe with Inno Setup 6 (or a zip without it).
 #   radio\    nekodrop-radio.exe (Intel) + Intel firmware, nekodrop-radio-rtl.exe (RTL8852CE),
-#             nekodrop-radio-mt.exe (MT7902) + nekodrop-radio-mtk.exe (MT7922/MT7921) + MediaTek firmware
+#             nekodrop-radio-usb.exe (RTL8821CU, USB), nekodrop-radio-mt.exe (MT7902)
+#             + nekodrop-radio-mtk.exe (MT7922/MT7921) + MediaTek firmware
 #   awdl\     awdld.exe (winawdl's AWDL daemon, OWL) + wintun.dll
 #   airdrop\  winawdl's AirDrop engine (Python, MIT)
 #   python\   the Python embeddable distribution
-#   driver\   the register-proxy UMDF driver package (signed on the target PC)
+#   driver\   the register-proxy UMDF driver package and the USB dongle's WinUSB
+#             package (both signed on the target PC)
 #   nekodrop.exe (client), NekoDropService.exe (service), install/uninstall scripts
 # -Offline skips the downloads (Python embeddable, TAP-Windows) and uses what
 # build\downloads already holds.
@@ -30,6 +32,12 @@ Copy-Item "$repo\build\iwxradio\firmware\*" "$stage\radio\firmware\"
 $rtlRadio = "$repo\build\rtlradio\winawdl_radio.exe"
 if (-not (Test-Path $rtlRadio)) { throw "RTL radio binary missing: $rtlRadio" }
 Copy-Item $rtlRadio "$stage\radio\nekodrop-radio-rtl.exe"
+
+'radio (Realtek RTL8821CU, USB)'
+& "$PSScriptRoot\build-radio-usb.ps1" | Out-Null
+$usbRadio = "$repo\build\usbradio\nekodrop-radio-usb.exe"
+if (-not (Test-Path $usbRadio)) { throw "USB radio binary missing: $usbRadio" }
+Copy-Item $usbRadio "$stage\radio\nekodrop-radio-usb.exe"
 
 'radio (MediaTek MT7902)'
 & "$PSScriptRoot\build-radio-mt.ps1" | Out-Null
@@ -84,8 +92,13 @@ if ((Get-Command cargo -ErrorAction SilentlyContinue) -and (Test-Path "$wd\Cargo
 & "$repo\driver\regproxy\build.ps1" | Out-Null
 New-Item -ItemType Directory -Force "$stage\driver" | Out-Null
 Copy-Item "$repo\driver\regproxy\build\winawdl_regproxy.inf", "$repo\driver\regproxy\build\winawdl_regproxy.dll" "$stage\driver\"
+# The RTL8821CU USB dongle's WinUSB package, catalogued here and signed on the
+# target PC with the same certificate as the register proxy (install.ps1).
+Copy-Item "$repo\driver\winusb\nekodrop_winusb.inf" "$stage\driver\"
 $now = Get-Date
-& $tools.StampInf -f "$stage\driver\winawdl_regproxy.inf" -d * -v "0.1.$(($now - [datetime]'2026-01-01').Days).$($now.Hour * 60 + $now.Minute)" | Out-Null
+$driverVersion = "0.1.$(($now - [datetime]'2026-01-01').Days).$($now.Hour * 60 + $now.Minute)"
+& $tools.StampInf -f "$stage\driver\winawdl_regproxy.inf" -d * -v $driverVersion | Out-Null
+& $tools.StampInf -f "$stage\driver\nekodrop_winusb.inf" -d * -v $driverVersion | Out-Null
 & $tools.Inf2Cat "/driver:$stage\driver" /os:10_X64 /uselocaltime | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Inf2Cat failed ($LASTEXITCODE)" }
 

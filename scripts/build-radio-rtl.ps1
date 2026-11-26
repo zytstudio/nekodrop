@@ -56,6 +56,7 @@ $build = Join-Path $repo 'build\rtlradio'
   -DCMAKE_BUILD_TYPE=Release `
   "-DCMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" `
   "-DVCPKG_MANIFEST_DIR=$winawdl\deps" `
+  '-DCMAKE_CXX_FLAGS=/EHsc /utf-8' `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static `
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed ($LASTEXITCODE)" }

@@ -1,4 +1,4 @@
-﻿# nekodrop diagnostic report: everything a bug report needs, in one file.
+# nekodrop diagnostic report: everything a bug report needs, in one file.
 # Start menu -> "nekodrop - diagnostic report", the tray menu, or run this.
 # Needs administrator rights (the service's logs and the driver state are
 # readable by administrators only); it asks for them itself.
@@ -32,6 +32,10 @@ Set-StrictMode -Off
 # The supported IDs are iwxradio/src/cards.h's kDeviceIds, the register
 # proxy's INF and install.ps1's check: keep them in step.
 $SupportedIntelIds = @('43F0', 'A0F0', '02F0', '06F0', '34F0', '3DF0', '4DF0', '2723', '2725', '7A70', '7AF0', '51F0', '51F1', '54F0', '7F70')
+# The card this report calls supported: the Intel IDs above, Realtek RTL8852CE,
+# the Realtek RTL8821CU USB dongle, and MediaTek MT7902/MT7921/MT7922. Defined
+# here (not with the collection below) so -SelfTest can check it offline.
+$SupportedCardPattern = '^(?:PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))|USB\\VID_0BDA&PID_(C820|C821))(?=&|\\|$)'
 # Known Wi-Fi chips, 'vendor:device' -> kind, name. Used to name the chip and to
 # find a card that has no driver (it is then no network adapter). Never used to
 # call a device wireless by its vendor alone: Intel and Realtek make Ethernet
@@ -53,6 +57,9 @@ $WifiChips = @{
   # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
   # via nekodrop's built-in devourer backend (on-demand AirDrop).
   '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
+  # Realtek RTL8821CU: a USB dongle driven over libusb (nekodrop-radio-usb.exe).
+  '0BDA:C820' = @('supported-rtl-usb', 'Realtek RTL8821CU (USB)')
+  '0BDA:C821' = @('supported-rtl-usb', 'Realtek RTL8821CU (USB)')
   # MediaTek MT7902: built-in mt76 port (nekodrop-radio-mt.exe, 5 GHz Wi-Fi beside AirDrop or on-demand).
   '14C3:7902' = @('supported-mtk', 'MediaTek MT7902')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
@@ -100,6 +107,7 @@ $WifiKinds = @{
   'supported'     = @('supported by nekodrop', '')
   'supported-mtk' = @('supported by nekodrop (5 GHz Wi-Fi beside AirDrop, or on-demand; built-in MediaTek backend)', 'Joins 5 GHz Wi-Fi beside AirDrop, or runs on demand while Windows keeps Wi-Fi.')
   'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
+  'supported-rtl-usb' = @('supported by nekodrop (experimental; USB dongle, on-demand AirDrop, built-in RTL8821CU backend)', 'nekodrop keeps this dongle: it is bound to nekodrop''s WinUSB driver, so the dongle has no Wi-Fi of its own from the first AirDrop on. Start menu > nekodrop - restore Windows Wi-Fi gives it back.')
   'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
   'intel-be-exp'  = @('supported by nekodrop (experimental, Concurrent Wi-Fi beside AirDrop or on-demand, not yet run on a real card)', 'Joins Wi-Fi beside AirDrop or runs on demand while Windows keeps Wi-Fi. Please post a diagnostic report in an issue whether it works or not.')
   'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
@@ -122,7 +130,13 @@ function Classify-WifiCard([string]$InstanceId, [string]$FriendlyName = '') {
   if ($id -match '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
   elseif ($id -match '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
   $kind = 'other'; $chip = ''
-  if ($bus -eq 'USB') { $kind = 'usb' }
+  if ($bus -eq 'USB') {
+    # A USB dongle nekodrop drives (RTL8821CU) is in the table; every other USB
+    # wireless adapter is refused as before.
+    $usbKey = $vendor + ':' + $device
+    if ($vendor -and $WifiChips.ContainsKey($usbKey)) { $kind = $WifiChips[$usbKey][0]; $chip = $WifiChips[$usbKey][1] }
+    else { $kind = 'usb' }
+  }
   elseif ($bus -eq 'PCI' -and $vendor) {
     $key = $vendor + ':' + $device
     if ($vendor -eq '8086' -and $SupportedIntelIds -contains $device) { $kind = 'supported'; $chip = 'Intel Wi-Fi 6/6E' }
@@ -142,10 +156,10 @@ function Classify-WifiCard([string]$InstanceId, [string]$FriendlyName = '') {
     Chip = $chip; Family = $chip; Kind = $kind; Status = $WifiKinds[$kind][0]; Note = $WifiKinds[$kind][1]
   }
 }
-# A known Wi-Fi chip by its PCI ID (supported or not).
+# A known Wi-Fi chip by its PCI or USB ID (supported or not).
 function Test-KnownWifiId([string]$InstanceId) {
   $c = Classify-WifiCard $InstanceId
-  if ($c.Bus -ne 'PCI') { return $false }
+  if (-not $c.VendorId) { return $false }
   return ($c.Kind -eq 'supported' -or $WifiChips.ContainsKey($c.VendorId + ':' + $c.DeviceId))
 }
 
@@ -246,6 +260,10 @@ if ($SelfTest) {
     @('PCI\VEN_168C&DEV_003E&SUBSYS_3212144F\4&1', 'qcom', 'Qualcomm Atheros QCA6174'),
     @('PCI\VEN_14E4&DEV_43A0&SUBSYS_0000106B\4&1', 'bcm', 'Broadcom BCM4360'),
     @('USB\VID_0BDA&PID_8812\00E04C000001', 'usb', 'Realtek 8812 (not in nekodrop''s table)'),
+    @('USB\VID_0BDA&PID_C820&REV_0200&MI_02\B&1D92DF5B&0&0002', 'supported-rtl-usb', 'Realtek RTL8821CU (USB)'),
+    @('USB\VID_0BDA&PID_C821\123456', 'supported-rtl-usb', 'Realtek RTL8821CU (USB)'),
+    @('usb\vid_0bda&pid_c820&rev_0200&mi_02\B&1', 'supported-rtl-usb', 'Realtek RTL8821CU (USB)'),
+    @('USB\VID_0BDA&PID_C822\1', 'usb', 'Realtek C822 (not in nekodrop''s table)'),
     @('PCI\VEN_1AE0&DEV_1234&SUBSYS_00001AE0\4&1', 'other', 'vendor 1AE0 1234 (not in nekodrop''s table)')
   )
   foreach ($c in $cases) {
@@ -256,6 +274,14 @@ if ($SelfTest) {
   if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C852').Family -ne 'Realtek RTL8852CE') { $fail += 'Family alias mismatch' }
   $rtlCard = Classify-WifiCard 'PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8'
   if ($rtlCard.Status -notmatch 'on-demand' -or $rtlCard.Status -notmatch 'RTL8852CE') { $fail += "10EC:C852 status missing on-demand/RTL8852CE: $($rtlCard.Status)" }
+  # The RTL8821CU USB dongle: accepted in every form, classified before the
+  # generic USB refusal, and never a 5-digit PID.
+  $usbCard = Classify-WifiCard 'USB\VID_0BDA&PID_C820&REV_0200&MI_02\B&1D92DF5B&0&0002'
+  if ($usbCard.Status -notmatch 'RTL8821CU' -or $usbCard.Status -notmatch 'experimental') { $fail += "0BDA:C820 status missing RTL8821CU/experimental: $($usbCard.Status)" }
+  if ($usbCard.Note -notmatch 'WinUSB') { $fail += "0BDA:C820 note does not say the dongle is kept: $($usbCard.Note)" }
+  if ('USB\VID_0BDA&PID_C820&REV_0200' -notmatch $SupportedCardPattern) { $fail += '0BDA:C820 not a supported card' }
+  if ('USB\VID_0BDA&PID_C8201' -match $SupportedCardPattern) { $fail += '5-digit USB PID accepted' }
+  if (-not (Test-KnownWifiId 'USB\VID_0BDA&PID_C820\123456')) { $fail += '0BDA:C820 not found as Wi-Fi by its ID' }
   foreach ($d in $SupportedIntelIds) {
     if ((Classify-WifiCard "PCI\VEN_8086&DEV_$d").Kind -ne 'supported') { $fail += "8086:$d not supported" }
   }
@@ -432,7 +458,6 @@ $svcStart = Try-Get { (Get-CimInstance Win32_Service -Filter "Name='NekoDropServ
 $exe = Join-Path $app 'NekoDropService.exe'
 $version = Try-Get { (Get-Item $exe).VersionInfo.ProductVersion }
 $config = Try-Get { Get-Content (Join-Path $state 'service.json') -Raw | ConvertFrom-Json }
-$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852|VEN_14C3&DEV_(7902|7961|0608|7922|0616))(?=&|\\|$)'
 # Every present device once: the supported card and the other wireless cards
 # below both come from it.
 $pnpAll = @(Try-Get { Get-PnpDevice -PresentOnly } | Where-Object { $_ })
@@ -492,7 +517,7 @@ function Wireless-Summary($dev) {
   $hw = if ($c.Bus -and $c.HardwareId -and $c.HardwareId -ne $c.Bus) { "$($c.Bus)\$($c.HardwareId)" } else { $c.HardwareId }
   return "$(Dev-Name $dev) (``$(Redact $hw)``): $($c.Chip), $($c.Status)"
 }
-$procs = @('nekodrop-radio', 'nekodrop-radio-rtl', 'nekodrop-radio-mt', 'nekodrop-radio-mtk', 'awdld', 'nekodrop', 'NekoDropService') | ForEach-Object {
+$procs = @('nekodrop-radio', 'nekodrop-radio-rtl', 'nekodrop-radio-usb', 'nekodrop-radio-mt', 'nekodrop-radio-mtk', 'awdld', 'nekodrop', 'NekoDropService') | ForEach-Object {
   $p = Get-Process $_ -ErrorAction SilentlyContinue
   if ($p) { "$_ (running)" } else { "$_ (not running)" }
 }

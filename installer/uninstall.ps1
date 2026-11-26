@@ -74,7 +74,7 @@ function Stop-FromTarget {
   $keep = @(Get-ProtectedProcessIds)
   # Everything running from the install folder, the AirDrop engine's python.exe
   # too (#22). The uninstaller and this PowerShell process are not ours to kill.
-  $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, nekodrop-radio-mt, nekodrop-radio-mtk, awdld -ErrorAction SilentlyContinue)
+  $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, nekodrop-radio-usb, nekodrop-radio-mt, nekodrop-radio-mtk, awdld -ErrorAction SilentlyContinue)
   $ours += @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
       try {
         $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -and
@@ -237,11 +237,20 @@ Try-Step 'Service' {
 
 Try-Step 'Driver package and certificate' {
   $store = [xml](pnputil /enum-drivers /format xml | Out-String)
-  $store.PnpUtil.Driver | Where-Object { $_.OriginalName -eq 'winawdl_regproxy.inf' -and $_.ProviderName -eq 'winairdrop project' } |
+  # The PCIe register proxy and the USB dongle's WinUSB package. Deleting the
+  # WinUSB package leaves the dongle on winusb.sys until it is unplugged or the
+  # vendor's driver is reinstalled (restore.ps1 does that before this runs).
+  $store.PnpUtil.Driver | Where-Object {
+      $_.ProviderName -eq 'winairdrop project' -and
+      ($_.OriginalName -eq 'winawdl_regproxy.inf' -or $_.OriginalName -eq 'nekodrop_winusb.inf')
+    } |
     ForEach-Object {
       pnputil /delete-driver $_.DriverName /uninstall /force | Out-Null
       if ($LASTEXITCODE -ne 0) { throw "pnputil /delete-driver $($_.DriverName) exited $LASTEXITCODE" }
     }
+  # A USB dongle released from the deleted package needs a re-detect before
+  # Windows binds the vendor's driver again (a PCIe card does it by itself).
+  pnputil /scan-devices | Out-Null
   foreach ($s in 'Root', 'TrustedPublisher') {
     Get-ChildItem "Cert:\LocalMachine\$s" | Where-Object { $_.Subject -eq $CertSubject } | Remove-Item -ErrorAction Stop
   }

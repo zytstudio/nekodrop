@@ -37,7 +37,8 @@ a card or administrator rights.
 | MediaTek MT7921/7922/7925/7927/7902, AMD RZ608/616/717 | `14C3:*` | low (long project) | No user-mode Windows driver exists. Would be a port of Linux `mt76` (registers, DMA, firmware, power) with nobody here owning the hardware. |
 | Qualcomm (FastConnect 6800/6900/7800), Atheros | `17CB:*` `168C:*` | low | No user-mode Windows driver path. |
 | Broadcom | `14E4:*` | very low | No open driver path on Windows. |
-| USB adapters | `USB\VID_*` | not planned | The register proxy and the DMA code are PCIe only. |
+| **Realtek RTL8821CU USB dongle** (`0BDA:C820`/`C821`) | `USB\VID_0BDA&PID_*` | **built-in (on-demand, experimental)** | See below: libusb over WinUSB, no register proxy. |
+| Other USB adapters | `USB\VID_*` | not planned | Every other family would need its own user-mode driver **and** a WinUSB package; devourer drives Realtek USB silicon only (plus an opt-in MediaTek MT7612U backend), and no daemon in this repo speaks its radio yet. |
 
 ### Realtek RTL8852CE
 
@@ -81,6 +82,38 @@ behavior, while RTL8852CE runs `radio\nekodrop-radio-rtl.exe` (winawdl's
    three scripts' `-SelfTest` suites run offline under Windows PowerShell 5.1
    in `scripts/build-installer.ps1`.
 
+### Realtek RTL8821CU (USB dongle)
+
+A USB dongle has no BAR, so the register proxy cannot reach it. It is still the
+same user-mode radio: winawdl's `radio/winawdl_radio.cpp` over
+[devourer](https://github.com/raph559/devourer)'s libusb transport, which drives
+the 8821C silicon (Jaguar2, chip-id `0x09`) with vendor control requests and
+bulk endpoints. What changes, and only for this card:
+
+1. **Driver package.** `driver/winusb/nekodrop_winusb.inf` binds Microsoft's
+   in-box WinUSB to `USB\VID_0BDA&PID_C820` (and `C821`), `Provider =
+   winairdrop project`. It is catalogued at build time (`Inf2Cat`) and signed on
+   the target PC with the same certificate and trusting steps the register proxy
+   uses; `install.ps1` only adds it to the driver store, so nothing is taken over
+   on install.
+2. **Daemon.** `usbradio/` builds `nekodrop-radio-usb.exe` from the same radio
+   source, with `-DNEKODROP_USB` (`scripts/patch-radio-usb.py` adds the libusb
+   path, a `Doorbell` in place of `PcieTransport`, and `--usb VID:PID`), and only
+   devourer's `JAGUAR2_8821C` backend. The RTL8852CE daemon is built from the
+   same patched file without the macro and is unchanged.
+3. **Taking and keeping it.** The service binds the WinUSB package the first time
+   it needs the dongle. `AdapterCapabilities.HandsBackCard = false` keeps it
+   there: a WinUSB device cannot also be a Windows network adapter, so this
+   dongle is dedicated to AirDrop until restore/uninstall rebinds Realtek's
+   driver (`$VendorProfiles['0BDA']` supplies the provider patterns).
+4. **Catalog and installer.** `0BDA:C820`/`C821` are active profiles
+   (`RadioBackendKind.RtlUsb`), `Card.Find` scans the USB enumerator after PCIe
+   and skips a composite dongle's `MI_xx` function nodes (the device node is what
+   the driver binds), and `install.ps1`/`report.ps1`/`restore.ps1` know the kind
+   `supported-rtl-usb`.
+
+Status, verification record and limitations: [RTL8821CU.md](RTL8821CU.md).
+
 ### The service's card catalog
 
 `app/service/CardCatalog.cs` is the service's one list of cards. Each
@@ -96,7 +129,7 @@ without a station) and uses `CardCatalog.BuildRadioLaunch` to select
 backend accepts. The 15 Intel profiles have every capability, so nothing
 changes for them.
 
-All 16 profiles (15 Intel + Realtek RTL8852CE `10EC:C852`) are active.
+All 24 profiles (15 Intel, Realtek RTL8852CE `10EC:C852`, the Realtek RTL8821CU USB dongle `0BDA:C820`/`C821`, MediaTek MT7902, and MediaTek MT7922/MT7921) are active.
 `NekoDropService.exe --selftest` (run by `scripts/build-installer.ps1`, so on
 every CI build) checks the multi-vendor parsing, the forced *on demand* mode,
 provider matching and `BuildRadioLaunch` across both `Iwx` and `Devourer`
@@ -174,6 +207,6 @@ When adding IDs, keep `AllProfiles` in `app/service/CardCatalog.cs`,
 `$SupportedIntelIds` (and `$SupportedCardPattern`) in `installer/report.ps1`,
 `installer/install.ps1` and `installer/restore.ps1`, `kDeviceIds` in
 `iwxradio/src/cards.h`, and the register proxy's INF in step. The service
-self-test expects 16 active profiles (15 Intel + Realtek `10EC:C852`), and the
+self-test expects 24 active profiles (15 Intel, Realtek `10EC:C852`, the USB `0BDA:C820`/`C821`, MediaTek MT7902 and MT7922/MT7921), and the
 installer self-tests keep the Intel ID table and multi-vendor classification
 tables in sync across scripts.
