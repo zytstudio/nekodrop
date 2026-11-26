@@ -32,6 +32,11 @@ to carry that complexity, which is why this support lives here.
 | `installer/*` | detection, report, restore and uninstall for `0BDA:C820`/`C821` |
 | `docs/RTL8821CU.md` | design, verification record and limitations of the supported dongle |
 
+**No updater.** The fork removes the client's GitHub release check and its
+install-on-demand path: an automatic update would replace these binaries with an
+upstream release that has no USB support. *Settings → About* shows the version,
+and a newer build is installed by running its installer.
+
 Everything else tracks upstream. A PCIe card behaves exactly as upstream's
 README, docs and changelog describe: the shared files gain USB branches that are
 inert when no dongle is present (`CardCatalog`, `Card.Find`, `Supervisor`,

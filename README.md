@@ -44,7 +44,7 @@
 - **The card you already have.** Intel AX200 / AX201 / AX210 / AX211 / 9560, Realtek RTL8852CE or an RTL8821CU USB dongle, MediaTek MT7902 / MT7921 / MT7922. No dongle needed for the PCIe cards ([all cards](#supported-cards)).
 - **Works like a Mac.** iPhone, iPad and Mac see your PC in the AirDrop sheet. Send with Explorer's right-click **Send with nekodrop** or the Windows Share sheet.
 - **Contacts Only** (experimental) with your Apple ID or a Mac's certificate ([how](docs/USAGE.md#contacts-only-apple-id-experimental)).
-- **Install and forget.** One installer, auto-updates, a self-healing service and a one-click restore back to Windows Wi-Fi.
+- **Install and forget.** One installer, a self-healing service and a one-click restore back to Windows Wi-Fi. This fork has no updater: it never replaces itself (see [docs/DOWNSTREAM.md](docs/DOWNSTREAM.md)).
 
 ## Speed
 

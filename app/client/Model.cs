@@ -79,8 +79,8 @@ public sealed class AppModel : Observable
     public event EventHandler? Stored;
     public void RaiseStored() => Stored?.Invoke(this, EventArgs.Empty);
     string _status = L.T("status.connecting"), _detail = "";
-    bool _looking, _discoveryBeaconUnavailable, _radioOn, _allow = true, _updatePreview;
-    string _air = "service_stopped", _mode = "", _ssid = "", _update = "";
+    bool _looking, _discoveryBeaconUnavailable, _radioOn, _allow = true;
+    string _air = "service_stopped", _mode = "", _ssid = "";
     int _channel;
     public string Status { get => _status; set => Set(ref _status, value); }
     public string Detail { get => _detail; set => Set(ref _detail, value); }
@@ -102,9 +102,6 @@ public sealed class AppModel : Observable
     public int Channel { get => _channel; set => Set(ref _channel, value); }
     /// <summary>The network nekodrop's own Wi-Fi is on, "" if none.</summary>
     public string Ssid { get => _ssid; set => Set(ref _ssid, value); }
-    /// <summary>A newer version found ("" if none), and whether it is a preview.</summary>
-    public string Update { get => _update; set => Set(ref _update, value); }
-    public bool UpdatePreview { get => _updatePreview; set => Set(ref _updatePreview, value); }
     string _portal = "";
     /// <summary>A network that wants a web sign-in after joining ("" if none).</summary>
     public string Portal { get => _portal; set => Set(ref _portal, value); }

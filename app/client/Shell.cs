@@ -188,23 +188,6 @@ public static class Shell
             """, "ask-" + id);
     }
 
-    /// <summary>"nekodrop 0.1.17 is available" with Update / Later.</summary>
-    public static void UpdateToast(string version, bool preview)
-    {
-        Show($"""
-            <toast launch="{X("nekodrop:update")}" activationType="protocol">
-              <visual><binding template="ToastGeneric">
-                <text>{X(L.F("update.title", version))}</text>
-                <text>{X(L.T(preview ? "update.bodyPreview" : "update.body"))}</text>
-              </binding></visual>
-              <actions>
-                <action content="{X(L.T("update.now"))}" arguments="{X("nekodrop:update")}" activationType="protocol"/>
-                <action content="{X(L.T("update.later"))}" arguments="dismiss" activationType="system"/>
-              </actions>
-            </toast>
-            """, "update");
-    }
-
     public static void DoneToast(string id, string title, string body, string? folder)
     {
         var launch = folder is null ? "nekodrop:open" : $"nekodrop:folder?path={Uri.EscapeDataString(folder)}";

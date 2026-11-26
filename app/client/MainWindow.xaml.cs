@@ -54,7 +54,7 @@ public partial class MainWindow : Window
 
     void OnModel(object? s, PropertyChangedEventArgs e) => ShowState();
 
-    /// <summary>The status pill, the Wi-Fi button and the update bar.</summary>
+    /// <summary>The status pill and the Wi-Fi button.</summary>
     void ShowState()
     {
         var m = A.Model;
@@ -63,8 +63,6 @@ public partial class MainWindow : Window
         StatusDot.SetResourceReference(Shape.FillProperty, dot);
         StatusPill.ToolTip = m.Air == "ready" ? L.F("status.on", m.Channel) : label;
         WifiText.Text = m.Mode == "concurrent" && m.Ssid != "" ? m.Ssid : "Wi-Fi";
-        UpdateBar.Visibility = m.Update == "" ? Visibility.Collapsed : Visibility.Visible;
-        UpdateText.Text = L.F(m.UpdatePreview ? "update.barPreview" : "update.bar", m.Update);
         ShowMark();
     }
 
@@ -341,21 +339,6 @@ public partial class MainWindow : Window
         _dialog = true;
         try { return show(); }
         finally { _dialog = false; Activate(); }
-    }
-
-    async void UpdateNow_Click(object sender, RoutedEventArgs e)
-    {
-        UpdateBar.IsEnabled = false;
-        var why = await A.InstallUpdate();
-        UpdateBar.IsEnabled = true;
-        if (why != "") UpdateText.Text = L.T("update.failed") + ": " + why;
-    }
-
-    void UpdateLater_Click(object sender, RoutedEventArgs e)
-    {
-        A.Settings.SkipVersion = A.Model.Update;
-        A.Settings.Save();
-        A.Model.Update = "";
     }
 
     void ChangeFolder_Click(object sender, RoutedEventArgs e)

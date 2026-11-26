@@ -42,7 +42,7 @@
 - **用你现有的网卡**：Intel AX200 / AX201 / AX210 / AX211 / 9560、Realtek RTL8852CE 或 RTL8821CU USB 网卡、MediaTek MT7902 / MT7921 / MT7922，PCIe 网卡无需额外购买 USB 网卡（[全部网卡](#支持的网卡)）。
 - **像 Mac 一样用**：iPhone、iPad、Mac 的 AirDrop 列表里直接出现你的电脑；资源管理器右键 **用 nekodrop 发送**，或用 Windows 分享面板。
 - **仅限联系人**（实验性）：登录 Apple ID 或导入 Mac 证书（[怎么用](docs/USAGE.zh-CN.md#仅限联系人apple-id实验性)）。
-- **装上就不用管**：一个安装包、自动更新、服务自动恢复，出问题一键回退到 Windows 自带 Wi-Fi。
+- **装上就不用管**：一个安装包、服务自动恢复，出问题一键回退到 Windows 自带 Wi-Fi。本分支没有自动更新，不会自己替换安装包（见 [docs/DOWNSTREAM.md](docs/DOWNSTREAM.md)）。
 
 ## 速度
 

@@ -10,7 +10,7 @@ namespace NekoDrop;
 /// Settings in four tabs (the design's pivot): general (name, folder,
 /// language, accent, start with Windows, hotkey), network and receiving
 /// (mode, ask first, always-accept list), card and advanced (detected or
-/// chosen card, experimental switches, diagnostic report), about and updates.
+/// chosen card, experimental switches, diagnostic report) and about.
 /// Save keeps the window open and says so; Cancel closes it.
 /// </summary>
 public partial class SettingsWindow : Window
@@ -18,7 +18,6 @@ public partial class SettingsWindow : Window
     static App A => App.Instance;
     string _folder;
     readonly List<string> _trusted;
-    string _releasesUrl = Updater.ReleasesPage;
 
     public SettingsWindow(string tab = "general")
     {
@@ -58,17 +57,13 @@ public partial class SettingsWindow : Window
         CoexPlanBox.IsChecked = (bool?)A.Service.Last?["coexPlan"] ?? false;
         HighThroughputBox.IsChecked = (bool?)A.Service.Last?["highThroughput"] ?? false;
         BleStandbyBox.IsChecked = s.BleStandby;
-        CheckUpdatesBox.IsChecked = s.CheckUpdates;
-        PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
-        DeleteInstallerBox.IsChecked = s.DeleteInstallerAfterInstall;
-        (s.UpdateLaunch == "background" ? UpdateTray : UpdateWindow).IsChecked = true;
-        VersionText.Text = "nekodrop " + Updater.Current;
-        Title = L.T("set.title") + " · nekodrop " + Updater.Current;
+        VersionText.Text = "nekodrop " + AppVersion.Current;
+        Title = L.T("set.title") + " · nekodrop " + AppVersion.Current;
         ShowCard(A.Service.Last);
         A.Service.Reply += OnCardsReply;
         Closed += (_, _) => A.Service.Reply -= OnCardsReply;
         A.Service.RequestCards();
-        (tab switch { "network" => TabNetwork, "appleid" => TabAppleId, "hardware" => TabHardware, "updates" => TabUpdates, _ => TabGeneral }).IsChecked = true;
+        (tab switch { "network" => TabNetwork, "appleid" => TabAppleId, "hardware" => TabHardware, "about" => TabAbout, _ => TabGeneral }).IsChecked = true;
     }
 
     void Tab_Checked(object sender, RoutedEventArgs e)
@@ -78,7 +73,7 @@ public partial class SettingsWindow : Window
         PageNetwork.Visibility = TabNetwork.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         PageAppleId.Visibility = TabAppleId.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         PageHardware.Visibility = TabHardware.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        PageUpdates.Visibility = TabUpdates.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PageAbout.Visibility = TabAbout.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ------------------------------------------------------------- accent
@@ -234,75 +229,6 @@ public partial class SettingsWindow : Window
 
     void Report_Click(object sender, RoutedEventArgs e) => App.RunReport();
 
-    // ------------------------------------------------------------- updates
-
-    void Status(string text, bool releases = false, double? progress = null)
-    {
-        UpdateBox.Visibility = Visibility.Visible;
-        UpdateStatus.Text = text;
-        OpenReleasesButton.Visibility = releases ? Visibility.Visible : Visibility.Collapsed;
-        UpdateBox.SetResourceReference(Border.BackgroundProperty, releases ? "WarnBg" : "AccentSubtle");
-        UpdateStatus.SetResourceReference(TextBlock.ForegroundProperty, releases ? "Warn" : "Text");
-        UpdateBarBox.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
-        UpdateBar.Progress = progress ?? 0;
-    }
-
-    static string FormatSpeed(long bytesPerSecond)
-    {
-        if (bytesPerSecond >= 1024 * 1024)
-            return $"{bytesPerSecond / (1024.0 * 1024.0):0.0} MB/s";
-        return $"{bytesPerSecond / 1024.0:0.0} KB/s";
-    }
-
-    async void CheckNow_Click(object sender, RoutedEventArgs e)
-    {
-        CheckNowButton.IsEnabled = false;
-        Status(L.T("update.checking"));
-        try
-        {
-            A.Settings.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
-            A.Settings.DeleteInstallerAfterInstall = DeleteInstallerBox.IsChecked == true;
-            A.Settings.UpdateLaunch = UpdateTray.IsChecked == true ? "background" : "window";
-            var res = await A.CheckForUpdateDetailed(true);
-            switch (res.Status)
-            {
-                case Updater.CheckStatus.UpToDate:
-                    Status(L.T("update.none"));
-                    return;
-                case Updater.CheckStatus.RateLimited:
-                    _releasesUrl = res.PageUrl ?? Updater.ReleasesPage;
-                    Status(res.NewerTag is not null ? L.F("update.rateLimitedFound", res.NewerTag) : L.T("update.rateLimited"), releases: true);
-                    return;
-                case Updater.CheckStatus.Failed:
-                    _releasesUrl = res.PageUrl ?? Updater.ReleasesPage;
-                    Status(res.NewerTag is not null
-                        ? L.F("update.checkFailedFound", res.NewerTag)
-                        : L.T("update.checkFailed") + (string.IsNullOrEmpty(res.Detail) ? "" : ": " + res.Detail),
-                        releases: true);
-                    return;
-            }
-            var found = res.Release;
-            if (found is null) { Status(L.T("update.none")); return; }
-            var text = L.F("update.found", found.Version.ToString());
-            Status(text, progress: 0);
-            var progress = new Progress<Updater.DownloadProgress>(p =>
-                Status($"{text} {p.Percent}% · {FormatSpeed(p.BytesPerSecond)}", progress: p.Percent / 100.0));
-            var why = await A.InstallUpdate(progress);
-            if (why != "")
-            {
-                _releasesUrl = string.IsNullOrWhiteSpace(found.Page) ? Updater.ReleasesPage : found.Page;
-                Status(L.T("update.failed") + ": " + why, releases: true);
-            }
-        }
-        finally { CheckNowButton.IsEnabled = true; }
-    }
-
-    void OpenReleases_Click(object sender, RoutedEventArgs e)
-    {
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_releasesUrl) { UseShellExecute = true }); }
-        catch (Exception) { }
-    }
-
     // ---------------------------------------------------------------- save
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -338,10 +264,6 @@ public partial class SettingsWindow : Window
         var bleStandby = BleStandbyBox.IsChecked == true;
         var bleStandbyChanged = bleStandby != s.BleStandby;
         s.BleStandby = bleStandby;
-        s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
-        s.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
-        s.DeleteInstallerAfterInstall = DeleteInstallerBox.IsChecked == true;
-        s.UpdateLaunch = UpdateTray.IsChecked == true ? "background" : "window";
         var language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "auto";
         var languageChanged = language != s.Language;
         s.Language = language;

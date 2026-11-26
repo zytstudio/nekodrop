@@ -29,14 +29,7 @@ public sealed class Settings
     public string Language { get; set; } = "auto";
     /// <summary>The AirDrop receiver's mDNS instance name, kept so engine restarts stay one device.</summary>
     public string ServiceId { get; set; } = "";
-    /// <summary>Look for a newer release now and then (never installs on its own).</summary>
-    public bool CheckUpdates { get; set; } = true;
-    /// <summary>Count pre-releases as updates (every nekodrop release is one for now).</summary>
-    public bool PreviewUpdates { get; set; } = true;
-    /// <summary>Delete the downloaded installer after a successful update, so %TEMP% does not keep every release.</summary>
-    public bool DeleteInstallerAfterInstall { get; set; } = true;
-    /// <summary>After a successful update: "window" (show the main panel) or "background" (tray only).</summary>
-    public string UpdateLaunch { get; set; } = "window";
+
     /// <summary>This PC's icon on the radar: "auto" (a laptop when there is a battery), "desktop" or "laptop".</summary>
     public string HubIcon { get; set; } = "auto";
     /// <summary>The global shortcut (Win+Shift+D unless recorded otherwise) opens the send window (with Explorer's selection) or the main window.</summary>
@@ -58,8 +51,6 @@ public sealed class Settings
     /// "colourful", Windows' accent with each state in its own colour.
     /// </summary>
     public string Accent { get; set; } = "";
-    /// <summary>A version the user chose to skip.</summary>
-    public string SkipVersion { get; set; } = "";
 
     static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop");
     static string FilePath => Path.Combine(Folder, "settings.json");

@@ -165,10 +165,6 @@ public sealed class App : Application
         var watchdog = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         watchdog.Tick += (_, _) => EngineWatchdog();
         watchdog.Start();
-        // Updates: a look a minute after start, then every 6 hours.
-        var updates = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-        updates.Tick += (_, _) => { updates.Interval = TimeSpan.FromHours(6); _ = CheckForUpdate(false); };
-        updates.Start();
         _ = Task.Run(ListenForArgs);
         HandleArgs(_startArgs, fromStart: true);
     }
@@ -344,7 +340,6 @@ public sealed class App : Application
         Model.Mode = "concurrent";
         Model.Channel = 149;
         Model.Ssid = "Office-5G";
-        Model.Update = "0.1.40";
         Motion.ForceOn = true;
         Model.Devices.Add(new Device { Id = "a", Name = "iPhone", Model = "iPhone15,2" });
         Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, State = "sending", Status = $"{L.F("send.sending", 0.42)} · 48.5 MB/s" });
@@ -384,7 +379,7 @@ public sealed class App : Application
             ("settings-network", () => new SettingsWindow("network"), 0),
             ("settings-appleid", () => new SettingsWindow("appleid"), 0),
             ("settings-hardware", () => new SettingsWindow("hardware"), 0),
-            ("settings-updates", () => new SettingsWindow("updates"), 0),
+            ("settings-about", () => new SettingsWindow("about"), 0),
             ("history", () => new HistoryWindow(), 0),
             ("wifi", () => { var w = new WifiWindow(); w.Render(wifiState); return w; }, 0),
             ("wifi-windows", () => { var w = new WifiWindow(); wifiState["mode"] = "ondemand"; w.Render(wifiState); return w; }, 0),
@@ -850,9 +845,6 @@ public sealed class App : Application
                 }
                 Answer(id, accept);
                 break;
-            case "update":
-                _ = InstallUpdate();
-                break;
             case "folder":
                 var path = q["path"];
                 if (path is not null && Directory.Exists(path)) Process.Start("explorer.exe", $"\"{path}\"");
@@ -898,49 +890,6 @@ public sealed class App : Application
             default:
                 ShowWindow();
                 break;
-        }
-    }
-
-    Updater.Release? _update;
-
-    /// <summary>Looks for a newer release; tells the user once per version. Returns the detailed result.</summary>
-    public async Task<Updater.CheckResult> CheckForUpdateDetailed(bool asked)
-    {
-        if (!asked && !Settings.CheckUpdates) return new Updater.CheckResult(Updater.CheckStatus.UpToDate);
-        var res = await Updater.Check(Settings.PreviewUpdates);
-        if (res.Status == Updater.CheckStatus.Available && res.Release is { } found)
-        {
-            if (Settings.SkipVersion != found.Version.ToString())
-            {
-                Model.Update = found.Version.ToString();
-                Model.UpdatePreview = found.Preview;
-            }
-            var announce = !asked && (_update is null || _update.Version != found.Version) &&
-                           Settings.SkipVersion != found.Version.ToString();
-            _update = found;
-            if (announce) Shell.UpdateToast(found.Version.ToString(), found.Preview);
-        }
-        return res;
-    }
-
-    /// <summary>Looks for a newer release; tells the user once per version. Returns what it found.</summary>
-    public async Task<Updater.Release?> CheckForUpdate(bool asked) => (await CheckForUpdateDetailed(asked)).Release;
-
-    /// <summary>Downloads, verifies and runs the installer of the release found. Returns "" or why not.</summary>
-    public async Task<string> InstallUpdate(IProgress<Updater.DownloadProgress>? progress = null)
-    {
-        var r = _update ?? await CheckForUpdate(true);
-        if (r is null) return L.T("update.none");
-        try
-        {
-            var why = await Updater.Install(r, progress, Settings.DeleteInstallerAfterInstall, Settings.UpdateLaunch == "window");
-            if (why != "") Shell.DoneToast("update", L.T("update.failed"), why, null);
-            return why;
-        }
-        catch (Exception e)
-        {
-            Shell.DoneToast("update", L.T("update.failed"), e.Message, null);
-            return e.Message;
         }
     }
 

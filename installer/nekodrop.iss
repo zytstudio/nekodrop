@@ -60,8 +60,9 @@ Name: "{autoprograms}\nekodrop - diagnostic report"; Filename: "{app}\report.cmd
 ; Started as the signed-in user: the first start registers the Explorer
 ; "用 nekodrop 发送" menu, Send To and the notification protocol for that user.
 Filename: "{app}\nekodrop.exe"; Description: "{cm:StartNow}"; Flags: postinstall nowait skipifsilent runasoriginaluser
-; An update started from nekodrop runs silently: start the new version again,
-; either with its main panel (the update setting) or in the background.
+; A silent install (/VERYSILENT) starts the new version once setup is done: in the
+; background, or with its main panel when /SHOWAPP is passed. nekodrop itself has
+; no updater, so this only matters for scripted installs.
 Filename: "{app}\nekodrop.exe"; Flags: nowait runasoriginaluser; Check: ShouldLaunchWindow
 Filename: "{app}\nekodrop.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: ShouldLaunchBackground
 

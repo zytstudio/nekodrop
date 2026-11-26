@@ -50,7 +50,7 @@ On first start nekodrop takes the Wi-Fi card away from the Intel driver and reco
 
 ### Updates
 
-nekodrop checks GitHub for a newer release a minute after it starts and then every 6 hours, resolving your current Windows system proxy dynamically and falling back to browser-style `github.com` web endpoints if `api.github.com` is blocked or rate-limited ([#62](../../../issues/62)). When it finds one, a notification offers **Update**. nekodrop downloads the installer with live download speed (`KB/s` / `MB/s`, [#64](../../../pull/64)), checks it against the SHA-256 GitHub publishes for it, and runs it (Windows asks for administrator rights). It never installs anything on its own. *Settings → About & updates* lets you toggle update checks, choose whether preview releases count, delete the downloaded installer after a successful install ([#44](../../../pull/44)), pick whether to open the **Main panel** or start in the **Tray** after an update ([#71](../../../pull/71)), or click **Check now**. There are two channels: **Stable** releases (currently `v2.2.8`), and **Preview** releases built as fixes land. Previews are included by default; untick *Include preview releases* to get only stable ones.
+This fork **has no updater**: nekodrop neither checks GitHub for releases nor replaces itself. *Settings → About* shows the build version and says so; a newer build is installed by running its installer over the old one, which keeps your settings and received files. This is deliberate — the fork adds USB dongle support that upstream builds do not have, so an automatic update to an upstream release would remove that support.
 
 ### Uninstall
 

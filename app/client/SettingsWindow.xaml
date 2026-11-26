@@ -44,7 +44,7 @@
         <RadioButton x:Name="TabNetwork" Style="{StaticResource Pivot}" Content="{local:T set.tab.network}" GroupName="tab" Checked="Tab_Checked"/>
         <RadioButton x:Name="TabAppleId" Style="{StaticResource Pivot}" Content="{local:T set.tab.appleid}" GroupName="tab" Checked="Tab_Checked"/>
         <RadioButton x:Name="TabHardware" Style="{StaticResource Pivot}" Content="{local:T set.tab.hardware}" GroupName="tab" Checked="Tab_Checked"/>
-        <RadioButton x:Name="TabUpdates" Style="{StaticResource Pivot}" Content="{local:T set.tab.updates}" GroupName="tab" Checked="Tab_Checked"/>
+        <RadioButton x:Name="TabAbout" Style="{StaticResource Pivot}" Content="{local:T set.tab.about}" GroupName="tab" Checked="Tab_Checked"/>
       </StackPanel>
     </Border>
 
@@ -325,64 +325,15 @@
           </Border>
         </StackPanel>
 
-        <!-- About and updates -->
-        <StackPanel x:Name="PageUpdates" Visibility="Collapsed">
+        <!-- About -->
+        <StackPanel x:Name="PageAbout" Visibility="Collapsed">
           <Border Style="{StaticResource CardPad}">
             <StackPanel>
-              <DockPanel>
-                <Button x:Name="CheckNowButton" DockPanel.Dock="Right" Style="{StaticResource WinButton}" Content="{local:T set.checkNow}"
-                        Click="CheckNow_Click" VerticalAlignment="Center"/>
-                <StackPanel>
-                  <TextBlock x:Name="VersionText" FontSize="14" FontWeight="SemiBold"/>
-                  <TextBlock Text="Windows 10 / 11 x64" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
-                </StackPanel>
-              </DockPanel>
-              <!-- What the last check found -->
-              <Border x:Name="UpdateBox" CornerRadius="8" Padding="10" Margin="0,12,0,0" Background="{DynamicResource AccentSubtle}" Visibility="Collapsed">
-                <StackPanel>
-                  <DockPanel>
-                    <Button x:Name="OpenReleasesButton" DockPanel.Dock="Right" Style="{StaticResource WinButton}" Content="{local:T update.openReleases}"
-                            Click="OpenReleases_Click" Visibility="Collapsed" Margin="8,0,0,0"/>
-                    <TextBlock x:Name="UpdateStatus" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                  </DockPanel>
-                  <Border x:Name="UpdateBarBox" Height="6" CornerRadius="3" Background="{DynamicResource Border}" Margin="0,8,0,0" Visibility="Collapsed">
-                    <local:Bar x:Name="UpdateBar" Fill="{DynamicResource Accent}"/>
-                  </Border>
-                </StackPanel>
-              </Border>
+              <TextBlock x:Name="VersionText" FontSize="14" FontWeight="SemiBold"/>
+              <TextBlock Text="Windows 10 / 11 x64" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
               <Border Style="{StaticResource Rule}" Margin="0,12"/>
-              <DockPanel>
-                <CheckBox x:Name="CheckUpdatesBox" DockPanel.Dock="Right" Style="{StaticResource WinToggle}"/>
-                <TextBlock Text="{local:T set.checkUpdates}" FontSize="13" VerticalAlignment="Center"/>
-              </DockPanel>
-              <DockPanel Margin="0,12,0,0">
-                <CheckBox x:Name="PreviewUpdatesBox" DockPanel.Dock="Right" Style="{StaticResource WinToggle}" Margin="12,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="{local:T set.previewUpdates}" FontSize="13"/>
-                  <TextBlock Text="{local:T set.updates.hint}" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
-                </StackPanel>
-              </DockPanel>
-              <Border Style="{StaticResource Rule}" Margin="0,12"/>
-              <DockPanel>
-                <CheckBox x:Name="DeleteInstallerBox" DockPanel.Dock="Right" Style="{StaticResource WinToggle}" Margin="12,0,0,0"/>
-                <StackPanel>
-                  <TextBlock Text="{local:T set.deleteInstaller}" FontSize="13"/>
-                  <TextBlock Text="{local:T set.deleteInstallerHint}" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
-                </StackPanel>
-              </DockPanel>
-              <Border Style="{StaticResource Rule}" Margin="0,12"/>
-              <DockPanel>
-                <Border DockPanel.Dock="Right" Style="{StaticResource SegmentBox}" VerticalAlignment="Center" Margin="12,0,0,0">
-                  <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="UpdateWindow" Style="{StaticResource Segment}" Content="{local:T set.updateLaunch.window}" GroupName="updatelaunch"/>
-                    <RadioButton x:Name="UpdateTray" Style="{StaticResource Segment}" Content="{local:T set.updateLaunch.tray}" GroupName="updatelaunch"/>
-                  </StackPanel>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock Text="{local:T set.updateLaunch}" FontSize="13" FontWeight="Medium"/>
-                  <TextBlock Text="{local:T set.updateLaunchHint}" Style="{StaticResource Sub12}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-              </DockPanel>
+              <TextBlock Text="{local:T set.about.fork}" Style="{StaticResource Sub12}" TextWrapping="Wrap"/>
+              <TextBlock Text="{local:T set.about.noUpdates}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
         </StackPanel>
