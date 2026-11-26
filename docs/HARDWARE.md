@@ -37,7 +37,7 @@ a card or administrator rights.
 | MediaTek MT7921/7922/7925/7927/7902, AMD RZ608/616/717 | `14C3:*` | low (long project) | No user-mode Windows driver exists. Would be a port of Linux `mt76` (registers, DMA, firmware, power) with nobody here owning the hardware. |
 | Qualcomm (FastConnect 6800/6900/7800), Atheros | `17CB:*` `168C:*` | low | No user-mode Windows driver path. |
 | Broadcom | `14E4:*` | very low | No open driver path on Windows. |
-| **Realtek RTL8821CU USB dongle** (`0BDA:C820`/`C821`) | `USB\VID_0BDA&PID_*` | **built-in (on-demand, experimental)** | See below: libusb over WinUSB, no register proxy. |
+| **Realtek RTL8821CU USB dongle** (`0BDA:C820`/`C821`, Wi-Fi function `MI_02`) | `USB\VID_0BDA&PID_*` | **this fork only (always on, experimental)** | See below: libusb over WinUSB, no register proxy. Upstream supports PCIe cards only. |
 | Other USB adapters | `USB\VID_*` | not planned | Every other family would need its own user-mode driver **and** a WinUSB package; devourer drives Realtek USB silicon only (plus an opt-in MediaTek MT7612U backend), and no daemon in this repo speaks its radio yet. |
 
 ### Realtek RTL8852CE
@@ -82,7 +82,11 @@ behavior, while RTL8852CE runs `radio\nekodrop-radio-rtl.exe` (winawdl's
    three scripts' `-SelfTest` suites run offline under Windows PowerShell 5.1
    in `scripts/build-installer.ps1`.
 
-### Realtek RTL8821CU (USB dongle)
+### Realtek RTL8821CU (USB dongle) — this fork only
+
+Upstream nekodrop supports PCIe cards, which the in-box driver can reach through
+a register BAR. This downstream fork adds the USB path described here; everything
+else in this file applies to both.
 
 A USB dongle has no BAR, so the register proxy cannot reach it. It is still the
 same user-mode radio: winawdl's `radio/winawdl_radio.cpp` over
@@ -91,9 +95,13 @@ the 8821C silicon (Jaguar2, chip-id `0x09`) with vendor control requests and
 bulk endpoints. What changes, and only for this card:
 
 1. **Driver package.** `driver/winusb/nekodrop_winusb.inf` binds Microsoft's
-   in-box WinUSB to `USB\VID_0BDA&PID_C820` (and `C821`), `Provider =
-   winairdrop project`. It is catalogued at build time (`Inf2Cat`) and signed on
-   the target PC with the same certificate and trusting steps the register proxy
+   in-box WinUSB to the dongle's Wi-Fi **function**,
+   `USB\VID_0BDA&PID_C820&MI_02` (and `C821&MI_02`), `Provider = winairdrop
+   project`. Listing the whole-device ID instead makes winusb.sys replace
+   `usbccgp`: the Wi-Fi function then received almost nothing and the dongle's
+   Bluetooth disappeared. The composite parent and Bluetooth keep their own
+   drivers. The package is catalogued at build time (`Inf2Cat`) and signed on the
+   target PC with the same certificate and trusting steps the register proxy
    uses; `install.ps1` only adds it to the driver store, so nothing is taken over
    on install.
 2. **Daemon.** `usbradio/` builds `nekodrop-radio-usb.exe` from the same radio
@@ -107,9 +115,10 @@ bulk endpoints. What changes, and only for this card:
    dongle is dedicated to AirDrop until restore/uninstall rebinds Realtek's
    driver (`$VendorProfiles['0BDA']` supplies the provider patterns).
 4. **Catalog and installer.** `0BDA:C820`/`C821` are active profiles
-   (`RadioBackendKind.RtlUsb`), `Card.Find` scans the USB enumerator after PCIe
-   and skips a composite dongle's `MI_xx` function nodes (the device node is what
-   the driver binds), and `install.ps1`/`report.ps1`/`restore.ps1` know the kind
+   (`RadioBackendKind.RtlUsb`) whose `BindId` is the `MI_02` function; `Card.Find`
+   scans the USB enumerator after PCIe and only accepts that function node, so the
+   composite parent (which carries the same vendor/product ID) is never mistaken
+   for the card. `install.ps1`/`report.ps1`/`restore.ps1` know the kind
    `supported-rtl-usb`.
 
 Status, verification record and limitations: [RTL8821CU.md](RTL8821CU.md).

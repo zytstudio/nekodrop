@@ -58,10 +58,13 @@ Pick one:
 - **A new port** → its own folder (`mtradio/`, `mtkradio/`), CMake + Ninja + MSVC `/MT`, reusing
   `iwxradio/src/{proxy,plat_win,pipe_server}` by relative path.
 - **A USB card** (no BAR, so no register proxy) → the RTL8821CU is the worked example (`usbradio/`,
-  `driver/winusb/`): the *same* winawdl radio source, built a second time with `-DNEKODROP_USB`
-  (`scripts/patch-radio-usb.py` adds `--usb VID:PID`, a `Doorbell` in place of `PcieTransport`, and a
-  1SS rate for a 1T1R part), plus a WinUSB INF (`Include=winusb.inf, Needs=WINUSB.NT`) bound to the
-  whole device. `usbradio/src/nekodrop_usb_session.h` owns libusb: `find_wifi_interface` (a composite
+  `driver/winusb/`). USB support lives in this downstream fork only: upstream takes PCIe cards, whose
+  register BAR can be proxied. The *same* winawdl radio source is built a second time with
+  `-DNEKODROP_USB` (`scripts/patch-radio-usb.py` adds `--usb VID:PID`, a `Doorbell` in place of
+  `PcieTransport`, and a 1SS rate for a 1T1R part), plus a WinUSB INF (`Include=winusb.inf,
+  Needs=WINUSB.NT`) bound to the dongle's Wi-Fi **function** only (`MI_02`): listing the whole
+  composite device makes winusb.sys replace usbccgp, and the Wi-Fi function then receives almost
+  nothing. `usbradio/src/nekodrop_usb_session.h` owns libusb: `find_wifi_interface` (a composite
   dongle's Wi-Fi is `MI_02`, never 0), `claim_interface_reset_reopen`, `CreateRadio`, and the teardown
   order through devourer's `DeviceSession` (radio before context; getting it backwards crashes).
   A WinUSB device cannot also be a Windows network adapter: the dongle is taken for good

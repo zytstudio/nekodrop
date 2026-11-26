@@ -5,8 +5,8 @@
 <h1 align="center">nekodrop</h1>
 
 <p align="center">
-  <b>用笔记本自带无线网卡在 Windows 上原生收发 AirDrop，Wi-Fi 照常上网。</b><br>
-  不需要 USB 网卡，不需要 Linux 虚拟机，也不需要 Mac。
+  <b>用 Windows 上的无线网卡原生收发 AirDrop，Wi-Fi 照常上网。</b><br>
+  不需要 Linux 虚拟机，也不需要 Mac —— PCIe 网卡 Wi-Fi 照常在线，USB 网卡是本分支新增的支持。
 </p>
 
 <p align="center">
@@ -25,6 +25,15 @@
   <br>
   <sub>实机拍摄：未装任何 App 的 iPhone ↔ Windows 11，自带 Intel AX201，全程 Wi-Fi 在线。</sub>
 </p>
+
+> ### 下游分支：支持 USB 无线网卡
+>
+> 本仓库是 [zheznanohana/nekodrop](https://github.com/zheznanohana/nekodrop) 的下游分支，
+> 新增了 **USB 无线网卡**支持（目前是 Realtek RTL8821CU）。上游只面向 PCIe 网卡
+> —— PCIe 网卡有寄存器 BAR，可以用系统自带驱动做代理；USB 网卡没有 —— 也不打算接收
+> USB 支持，所以 USB 相关的问题和 PR 请提到**本仓库**，不要提到上游。其余内容跟随上游，
+> PCIe 网卡的表现与上游 README 完全一致。范围、验证记录与同步上游的方法见
+> [docs/DOWNSTREAM.md](docs/DOWNSTREAM.md)。
 
 ## 亮点
 
@@ -53,7 +62,7 @@ Intel AX201、Windows 11、`v2.2.9+`，开启高吞吐模式（HE80 + MTU 1500�
 | **Intel** | AX201 · AX200 · AX210 · AX211 · AX411 / Killer AX1690 · 9560 | 实测可用（AX201 作者实测，其余为用户反馈） |
 | **Intel** | BE200（Wi-Fi 7） | 实验性 |
 | **Realtek** | RTL8852CE | 用户实测，约 24.5 MB/s（按需接管） |
-| **Realtek** | RTL8821CU USB 网卡（`0BDA:C820`/`C821`） | 实验性：已验证上电、接收与注入；网卡会一直归 nekodrop 驱动 |
+| **Realtek** | RTL8821CU USB 网卡（`0BDA:C820`/`C821`） | **本分支新增**，实验性：已验证 iPhone → PC 隔空投送（149 信道 / 20 MHz）；网卡会一直归 nekodrop 驱动 |
 | **MediaTek** | MT7902 | 双向实测，可同时连 Wi-Fi |
 | **MediaTek** | MT7922 / RZ616 · MT7921 / RZ608 | 实验性（MT7922 双向实测） |
 

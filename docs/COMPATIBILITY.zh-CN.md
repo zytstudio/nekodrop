@@ -39,10 +39,13 @@ nekodrop 在用户态直接驱动无线网卡芯片，使 Windows 原生运行�
 | 网卡 / 系列 | Device ID | 支持模式 | 状态 |
 |---|---|---|---|
 | **Realtek RTL8852CE** | `10EC:C852` | 按需接管（原厂驱动照常连 Wi-Fi） | ⚠️ **已内置待实测**（原生内置 `nekodrop-radio-rtl.exe`，基于 [winawdl](https://github.com/raph559/winawdl)/`devourer` 完整 A-MPDU 后端；CI 已编译并通过离线单测，待在 nekodrop 内真机验证；Intel 默认行为 100% 不变） |
-| **Realtek RTL8821CU**（USB 网卡） | `0BDA:C820` `0BDA:C821` | 仅按需接管（网卡会一直归 nekodrop 的 WinUSB 驱动） | 🧪 **已内置，实验性**：在一块网卡上验证了上电、监听接收与注入；AirDrop 尚未实测（[RTL8821CU.md](RTL8821CU.md)） |
+| **Realtek RTL8821CU**（USB 网卡） | `0BDA:C820` `0BDA:C821` | 常驻（网卡会一直归 nekodrop 的 WinUSB 驱动） | 🧪 **仅本分支，实验性**：WinUSB 绑到网卡 `MI_02`；已验证 iPhone → PC 隔空投送（149 / 20 MHz）；PC → iPhone 未测（[RTL8821CU.md](RTL8821CU.md)） |
 | **Realtek RTL8852BE / RTL8851BE** | `10EC:B852` `B85B` `B851` | 按需接管 | 🚧 紧随 RTL8852CE 之后接入（基于 `OpenIPC/devourer` `KESTREL_8852B`） |
 | Realtek RTL8852AE / RTL8922AE | `10EC:8852` `8922` | 按需接管 | 🗓️ 规划中 |
 | Realtek RTL8821CE / RTL8822CE / RTL8822BE、其他 Realtek USB 网卡 | `10EC:*`、`0BDA:*` | — | ❌ 不支持 |
+
+RTL8821CU 这一行是**本下游分支**新增的：上游 nekodrop 只提供 PCIe 网卡（有寄存器 BAR
+可供驱动代理）。USB 网卡没有 BAR，所以需要本分支里的 libusb 传输。
 
 ---
 

@@ -5,8 +5,8 @@
 <h1 align="center">nekodrop</h1>
 
 <p align="center">
-  <b>Native AirDrop on Windows with your laptop's built-in Wi-Fi card. Wi-Fi keeps working.</b><br>
-  No USB dongle, no Linux VM, no Mac.
+  <b>Native AirDrop on Windows with your Wi-Fi card. Wi-Fi keeps working.</b><br>
+  No Linux VM, no Mac — a PCIe card keeps your Wi-Fi online, a USB dongle is this fork's addition.
 </p>
 
 <p align="center">
@@ -25,6 +25,17 @@
   <br>
   <sub>Real hardware: unmodified iPhone ↔ Windows 11 on a built-in Intel AX201, Wi-Fi online the whole time.</sub>
 </p>
+
+> ### Downstream fork: USB Wi-Fi dongles
+>
+> This repository is a fork of
+> [zheznanohana/nekodrop](https://github.com/zheznanohana/nekodrop) that adds
+> support for **USB Wi-Fi dongles** (currently the Realtek RTL8821CU). Upstream
+> targets PCIe cards — a PCIe card has a register BAR that the in-box driver can
+> proxy, while a USB dongle has none — and does not plan to take USB support, so
+> USB-only issues and pull requests belong **here**, not upstream. Everything
+> else tracks upstream, and a PCIe card behaves exactly as upstream's README
+> describes. Scope, verification record and how to sync: [docs/DOWNSTREAM.md](docs/DOWNSTREAM.md).
 
 ## Highlights
 
@@ -53,11 +64,14 @@ How we measure: [docs/TESTING.md](docs/TESTING.md).
 | **Intel** | AX201 · AX200 · AX210 · AX211 · AX411 / Killer AX1690 · 9560 | Tested (AX201 by the author, others by users) |
 | **Intel** | BE200 (Wi-Fi 7) | Experimental |
 | **Realtek** | RTL8852CE | User-tested, ~24.5 MB/s (on demand) |
-| **Realtek** | RTL8821CU USB dongle (`0BDA:C820`/`C821`) | Experimental: bring-up, RX and injection verified; the dongle stays on nekodrop's driver |
+| **Realtek** | RTL8821CU USB dongle (`0BDA:C820`/`C821`) | **Fork only**, experimental: iPhone → PC AirDrop verified (149 / 20 MHz); the dongle stays on nekodrop's driver |
 | **MediaTek** | MT7902 | Tested both ways, Wi-Fi at the same time |
 | **MediaTek** | MT7922 / RZ616 · MT7921 / RZ608 | Experimental (MT7922 tested both ways) |
 
-Not listed means not supported (Qualcomm, Broadcom, Intel BE201/BE211…). PCI IDs, firmware and per-card notes: **[Card compatibility](docs/COMPATIBILITY.md)** · **[Status and how to add a card](docs/CARDS.md)**.
+Not listed means not supported (Qualcomm, Broadcom, Intel BE201/BE211…). The
+RTL8821CU row is this fork's addition; upstream supports the PCIe cards only.
+PCI IDs, firmware and per-card notes: **[Card compatibility](docs/COMPATIBILITY.md)**
+· **[Status and how to add a card](docs/CARDS.md)**.
 
 ## Install
 

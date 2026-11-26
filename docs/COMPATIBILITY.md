@@ -39,10 +39,14 @@ nekodrop drives the Wi-Fi chip directly from user mode so Windows can speak Appl
 | Card / Family | Device IDs | Modes | Status |
 |---|---|---|---|
 | **Realtek RTL8852CE** | `10EC:C852` | On-Demand (native Wi-Fi kept by Windows) | ⚠️ **Built-in, untested inside nekodrop** (ships native `nekodrop-radio-rtl.exe` from [winawdl](https://github.com/raph559/winawdl)/`devourer` with A-MPDU; compiled and offline-tested in CI, awaiting real-hardware confirmation inside nekodrop; Intel default behavior unchanged) |
-| **Realtek RTL8821CU** (USB dongle) | `0BDA:C820` `0BDA:C821` | On-Demand only (the dongle stays on nekodrop's WinUSB driver) | 🧪 **Built-in, experimental**: bring-up, monitor RX and injection verified on one dongle; AirDrop not yet run ([RTL8821CU.md](RTL8821CU.md)) |
+| **Realtek RTL8821CU** (USB dongle) | `0BDA:C820` `0BDA:C821` | Always on (the dongle stays on nekodrop's WinUSB driver) | 🧪 **This fork only, experimental**: WinUSB on the dongle's `MI_02`; iPhone → PC AirDrop verified (149 / 20 MHz); PC → iPhone untested ([RTL8821CU.md](RTL8821CU.md)) |
 | **Realtek RTL8852BE / RTL8851BE** | `B852` `B85B` `B851` | On-Demand | 🚧 Planned right after RTL8852CE (leverages `OpenIPC/devourer` `KESTREL_8852B`) |
 | Realtek RTL8852AE / RTL8922AE | `8852` `8922` | On-Demand | 🗓️ Planned |
 | Realtek RTL8821CE / RTL8822CE / RTL8822BE, other Realtek USB dongles | `10EC:*`, `0BDA:*` | — | ❌ Not supported |
+
+The RTL8821CU row is an addition of **this downstream fork**: upstream nekodrop
+only ships PCIe cards, whose register BAR the driver can proxy. A USB dongle has
+none, so it needs the libusb transport in this fork.
 
 ---
 

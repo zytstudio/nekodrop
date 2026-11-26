@@ -21,16 +21,17 @@
   - **待机 BLE 广播开关**：在 **设置 → 网卡与高级 → 实验性功能** 新增 **「待机 BLE 广播（后台持续可被发现）」** 开关（默认关闭，切换后自动重启引擎并下发 `NEKODROP_BLE_STANDBY`）。
 - **MediaTek 驱动共享 32-bit KMDF 公共缓冲区辅助模块（[#74](https://github.com/zheznanohana/nekodrop/pull/74)，感谢 `@Yanlyn`）**：
   - 新增 `driver/common/` 共享分配器头文件与 `CTest` 单元测试。
-- **新增 Realtek RTL8821CU（USB 无线网卡）支持（实验性）**：
+- **新增 Realtek RTL8821CU（USB 无线网卡）支持（本分支新增，实验性）**：
   - 新增 `radio\nekodrop-radio-usb.exe`（`usbradio/`）：winawdl 同一份 radio 源码，改走 devourer 的 libusb 传输，只编译 Jaguar2 8821C 后端；新增 `scripts/patch-radio-usb.py`（`--usb VID:PID`、`Doorbell` 抽象、1T1R 速率）与 `scripts/build-radio-usb.ps1`；
   - 新增 `driver/winusb/nekodrop_winusb.inf`（WinUSB，`0BDA:C820`/`C821`），由安装器在目标机签名并加入驱动库；服务首次接管时绑定，`HandsBackCard = false` 表示这块网卡专供 nekodrop，直到一键回退/卸载才还给 Realtek；
-  - 服务：`CardCatalog` 增加 `AdapterBus`/`RtlUsb` 后端与 USB profile，`Card.Find` 在 PCIe 之后扫描 USB 并跳过复合设备的 `MI_xx` 功能节点；`install.ps1`/`report.ps1`/`restore.ps1`/`uninstall.ps1` 识别 `supported-rtl-usb` 并新增 `0BDA:C820`/`C821`；
-  - 真机验证：WinUSB 绑定到 Wi-Fi 功能（`MI_02`）、libusb 打开、固件下载、监听接收与注入；并在 **149 信道 / 40 MHz** 上完成 **iPhone → PC 的真实隔空投送**（发现、`/Discover`、`/Ask`、228,844 字节文件落盘）。**PC → iPhone 发送方向尚未实测**，因此仍标注实验性。详见 [docs/RTL8821CU.md](docs/RTL8821CU.md)；
+  - 服务：`CardCatalog` 增加 `AdapterBus`/`RtlUsb` 后端与 USB profile，`Card.Find` 在 PCIe 之后扫描 USB，只接受 Wi-Fi 功能节点（`MI_02`），不会把 ID 相同的复合父设备当成网卡；`install.ps1`/`report.ps1`/`restore.ps1`/`uninstall.ps1` 识别 `supported-rtl-usb` 并新增 `0BDA:C820`/`C821`；
+  - 真机验证：WinUSB 绑定到 Wi-Fi 功能（`MI_02`）、libusb 打开、固件下载、监听接收与注入；并在 **149 信道 / 20 MHz** 上完成 **iPhone → PC 的真实隔空投送**（双向发现、`/Discover`、`/Ask`；14.2 MB Live Photo 包 40.4 秒传完、平均 339 KB/s，Live Photo 正确配对）。**PC → iPhone 发送方向尚未实测**，因此仍标注实验性。详见 [docs/RTL8821CU.md](docs/RTL8821CU.md)；
   - 关键修正：绑定必须是复合设备的 `MI_02`（Wi-Fi 功能），绑整个设备会让接收几乎收不到帧；信道固定 149、20 MHz（devourer 的 8821C 路径不支持 80 MHz，40 MHz 有只能拔插清掉的降级模式）；客户端与引擎需运行（awdld 的 `awdl0` + mDNS 才能回答手机）；
   - 大文件卡死修正：接收方向的 BlockAck 窗口从 64 帧改为 **8 帧**（`NEKODROP_USB_BA_WINDOW`，由服务传给 radio），避免 8821CU 的硬件 block-ack 记分板在丢一帧后把手机的整个窗口卡死（原来 42 MB 传到 6.7 MB 就 30 秒无数据、HTTP 408）。实测 14.2 MB / 3 张 Live Photo 共 6 个文件 40.4 秒传完，平均 **339 KB/s**；
   - 速度修正（iPhone→PC 从约 70 KB/s 起）：awdld 加 `-s 1`（1T1R 如实上报，避免手机发 2SS 速率），带宽固定 20 MHz（40 MHz 有只能拔插恢复的降级模式）；
-  - 首次上电约 50 秒（USB 逐寄存器写 PHY 表），为此放宽三处超时：awdld 的 radio greeting 10→180 秒（`patch-awdl.py`）、服务的 ready 重启阈值 60→240 秒（仅 `RtlUsb`）、以及独占用卡的 idle 停止窗口 90 秒 → 至少 30 分钟；radio 刚 ready 不再被立刻当作 idle 停掉；
-  - 构建：RTL8852CE radio 的 MSVC 编译加 `/utf-8`（`build-radio-rtl.ps1`），非英文代码页的机器也能构建。
+  - 首次上电约 50 秒（USB 逐寄存器写 PHY 表），为此放宽两处超时并调整专用卡策略：awdld 的 radio greeting 10→180 秒（`patch-awdl.py`）、服务的 ready 重启阈值 60→240 秒（仅 `RtlUsb`）、独占用卡改为开机即启动、不再因空闲停止；radio 刚 ready 不再被立刻当作 idle 停掉；
+  - 构建：RTL8852CE radio 的 MSVC 编译加 `/utf-8`（`build-radio-rtl.ps1`），非英文代码页的机器也能构建；
+  - **范围**：USB 支持只存在于本下游分支。上游 nekodrop 只面向 PCIe 网卡（有寄存器 BAR 可代理），不打算接收 USB 支持，USB 相关问题请提到本仓库；其余行为与上游一致。
 
 ### English
 
@@ -45,16 +46,17 @@
   - **Standby BLE beacon toggle:** Added **Standby BLE beacon (stay discoverable in background)** under **Settings → Card and advanced → Experimental** (`NEKODROP_BLE_STANDBY`, off by default, restarts engine on change).
 - **Shared 32-bit KMDF common-buffer allocator for MediaTek queues ([#74](https://github.com/zheznanohana/nekodrop/pull/74), thanks `@Yanlyn`):**
   - Added `driver/common/` headers and `CTest` unit tests.
-- **New: Realtek RTL8821CU USB Wi-Fi card support (experimental):**
+- **New in this fork: Realtek RTL8821CU USB Wi-Fi card support (experimental):**
   - New `radio\nekodrop-radio-usb.exe` (`usbradio/`): the same winawdl radio source over devourer's libusb transport, with only the Jaguar2 8821C backend; new `scripts/patch-radio-usb.py` (`--usb VID:PID`, a `Doorbell` abstraction, a 1T1R rate) and `scripts/build-radio-usb.ps1`;
   - New `driver/winusb/nekodrop_winusb.inf` (WinUSB, `0BDA:C820`/`C821`), signed on the target PC by the installer and added to the driver store; the service binds it on the first take and `HandsBackCard = false` keeps this dongle on nekodrop until restore/uninstall gives it back to Realtek;
-  - Service: `CardCatalog` gains `AdapterBus`, the `RtlUsb` backend and USB profiles; `Card.Find` scans USB after PCIe and skips a composite dongle's `MI_xx` function nodes; `install.ps1`/`report.ps1`/`restore.ps1`/`uninstall.ps1` know `supported-rtl-usb` and the `0BDA:C820`/`C821` IDs;
-  - Verified on real hardware: WinUSB bound to the Wi-Fi function (`MI_02`), libusb open, firmware download, monitor RX and injection, and a real **iPhone → PC AirDrop** on **channel 149 / 40 MHz** (discovery, `/Discover`, `/Ask`, a 228,844-byte file stored). **PC → iPhone sending is untested**, hence experimental. See [docs/RTL8821CU.md](docs/RTL8821CU.md);
+  - Service: `CardCatalog` gains `AdapterBus`, the `RtlUsb` backend and USB profiles; `Card.Find` scans USB after PCIe and accepts only the Wi-Fi function node (`MI_02`), never the composite parent that carries the same ID; `install.ps1`/`report.ps1`/`restore.ps1`/`uninstall.ps1` know `supported-rtl-usb` and the `0BDA:C820`/`C821` IDs;
+  - Verified on real hardware: WinUSB bound to the Wi-Fi function (`MI_02`), libusb open, firmware download, monitor RX and injection, and a real **iPhone → PC AirDrop** on **channel 149 / 20 MHz** (discovery both ways, `/Discover`, `/Ask`; a 14.2 MB Live Photo bundle in 40.4 s, 339 KB/s, Live Photo pairing). **PC → iPhone sending is untested**, hence experimental. See [docs/RTL8821CU.md](docs/RTL8821CU.md);
   - Fixes that mattered: bind the composite device's `MI_02` (Wi-Fi function), not the whole device (whole-device WinUSB received almost nothing); pin channel 149 at 20 MHz (devourer's 8821C path does not work at 80 MHz, and 40 MHz has a degraded mode that only a USB replug clears); the client and engine must run so awdld's `awdl0` can answer mDNS;
   - Long-upload stall fixed: the receive block-ack window is now **8 frames** instead of 64 (`NEKODROP_USB_BA_WINDOW`, passed to the radio by the service), so one lost frame no longer wedges the 8821CU's hardware block-ack scoreboard and stalls the phone (a 42 MB upload used to stop at 6.7 MB with 30 s of silence and HTTP 408). Measured after the change: a 14.2 MB Live Photo bundle (6 files) in 40.4 s, **339 KB/s** average, no stall;
-  - Speed (from ~70 KB/s for iPhone→PC): awdld gets `-s 1` (honest 1T1R, so the phone stops picking 2SS rates) and the radio stays at 20 MHz (40 MHz has a degraded mode that only a USB replug clears).
-  - The first bring-up takes ~50 s (PHY tables written one register per USB control transfer), so three timeouts were raised: awdld's radio greeting 10→180 s (`patch-awdl.py`), the service's "never became ready" restart 60→240 s (`RtlUsb` only), and the idle-stop window for a dedicated card from 90 s to at least 30 minutes; a radio that has just said "ready" is no longer counted as idle;
-  - Build: `/utf-8` for the RTL8852CE radio's MSVC build (`build-radio-rtl.ps1`), so a non-English code page can build it too.
+  - Speed (from ~70 KB/s for iPhone→PC): awdld gets `-s 1` (honest 1T1R, so the phone stops picking 2SS rates) and the radio stays at 20 MHz (40 MHz has a degraded mode that only a USB replug clears);
+  - The first bring-up takes ~50 s (PHY tables written one register per USB control transfer), so two timeouts were raised and the dedicated-card policy changed: awdld's radio greeting 10→180 s (`patch-awdl.py`), the service's "never became ready" restart 60→240 s (`RtlUsb` only), and a dedicated card now starts with the service and is never stopped for being idle; a radio that has just said "ready" is no longer counted as idle;
+  - Build: `/utf-8` for the RTL8852CE radio's MSVC build (`build-radio-rtl.ps1`), so a non-English code page can build it too;
+  - **Scope:** USB support lives in this downstream fork only. Upstream nekodrop targets PCIe cards (a register BAR the driver can proxy) and does not plan to take USB support, so USB issues belong in this repository; everything else behaves as upstream.
 
 ---
 

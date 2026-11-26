@@ -2,6 +2,11 @@
 
 English · [Back to README](../README.md) · [Card compatibility](COMPATIBILITY.md)
 
+> **This card is supported by this downstream fork only.** Upstream nekodrop
+> ships PCIe cards, whose register BAR the in-box driver can proxy; a USB dongle
+> has none. Please report issues and pull requests about this card in this
+> repository, not upstream.
+
 A USB Wi-Fi dongle on AirDrop, driven from user mode, with no kernel driver of
 ours: the radio talks to the chip through `libusb` over Microsoft's in-box
 WinUSB driver. `rtw88`/`rtl8821cu` vendor drivers are never involved.

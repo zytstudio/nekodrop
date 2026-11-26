@@ -8,7 +8,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 
 - **Intel** 22000 / AX210 族，以及实验性的 **BE200**（`nekodrop-radio.exe`，移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`）：同时连 Wi-Fi 或按需接管。
 - **Realtek RTL8852CE**（`nekodrop-radio-rtl.exe`，基于 [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer)）：按需接管。
-- **Realtek RTL8821CU USB 网卡**（`nekodrop-radio-usb.exe`，同一份 winawdl radio，走 devourer 的 libusb 传输）：按需接管，实验性。
+- **Realtek RTL8821CU USB 网卡**（`nekodrop-radio-usb.exe`，同一份 winawdl radio，走 devourer 的 libusb 传输）：常驻（随服务启动），实验性。**仅本分支**——上游 nekodrop 只支持 PCIe 网卡，没有 USB 路径。
 - **MediaTek MT7902**（`nekodrop-radio-mt.exe`）和 **MT7921 / MT7922**（`nekodrop-radio-mtk.exe`），从 Linux mt76 移植到用户态：同时连 Wi-Fi（仅 5 GHz）或按需接管。
 
 哪些在真机上测过，见下表。表外的网卡见[适配新网卡](#适配新网卡)。
@@ -27,7 +27,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 | Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户实测可用（[#37](../../../issues/37)） |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
 | **Realtek RTL8852CE** | `10EC:C852` | 内嵌固件（`devourer`，仅按需接管） | ✅ 已内置；用户实测双向可用，峰值约 **24.5 MB/s**（[#61](../../../issues/61)） |
-| **Realtek RTL8821CU**（USB） | `0BDA:C820` `0BDA:C821` | 内嵌固件（`devourer` 走 libusb，仅按需接管） | 🧪 实验性，已内置；在一块网卡上验证了上电、监听接收与注入，AirDrop 本身尚未实测（[RTL8821CU.md](RTL8821CU.md)） |
+| **Realtek RTL8821CU**（USB） | `0BDA:C820` `0BDA:C821` | 内嵌固件（`devourer` 走 libusb，常驻） | 🧪 **仅本分支**，实验性：WinUSB 绑到网卡 `MI_02`，已验证 iPhone → PC 隔空投送（149 / 20 MHz，14.2 MB Live Photo 包 339 KB/s）；PC → iPhone 未测（[RTL8821CU.md](RTL8821CU.md)） |
 | **MediaTek MT7902** | `14C3:7902` | linux-firmware `WIFI_RAM_CODE_MT7902_1`（移植自 `mt76`，同时连 Wi-Fi（仅 5 GHz）与按需接管） | ✅ 已内置；双向 AirDrop（接收约 15 MB/s，发送约 5 MB/s）与同时连 Wi-Fi 均已真机实测（[#34](../../../pull/34)、[#47](../../../pull/47)） |
 | **MediaTek MT7922 / AMD RZ616** | `14C3:0616` `14C3:7922` | linux-firmware `WIFI_RAM_CODE_MT7922_1`（`mtkradio`，同时连 Wi-Fi（仅 5 GHz，实验性）与按需接管） | 🧪 实验性，已内置；双向 AirDrop 已实测（[#40](../../../pull/40)，[docs/MT7922.md](MT7922.md)）；`v2.2.8`–`v2.2.9` 已补齐 HE80 2SS LWTBL、扫描 `FIF_BIT_CLR`、固件 RA 与 RX A-MSDU 修复（[#65](../../../pull/65)、[#66](../../../issues/66)） |
 | **MediaTek MT7921 / AMD RZ608** | `14C3:7961` `14C3:0608` | linux-firmware `WIFI_RAM_CODE_MT7961_1`（`mtkradio`，同时连 Wi-Fi（仅 5 GHz，实验性）与按需接管） | ⚠️ 实验性，已内置；按需与同时连 Wi-Fi 均尚未在真机上测试 |

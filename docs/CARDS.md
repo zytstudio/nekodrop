@@ -8,7 +8,7 @@ nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog
 
 - **Intel** 22000 / AX210 families and the experimental **BE200** (`nekodrop-radio.exe`, ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`): Concurrent or on demand.
 - **Realtek RTL8852CE** (`nekodrop-radio-rtl.exe`, built from [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer)): on demand.
-- **Realtek RTL8821CU USB dongle** (`nekodrop-radio-usb.exe`, the same winawdl radio over devourer's libusb transport): on demand, experimental.
+- **Realtek RTL8821CU USB dongle** (`nekodrop-radio-usb.exe`, the same winawdl radio over devourer's libusb transport): always on (started with the service), experimental. **This fork only** — upstream nekodrop supports PCIe cards and has no USB path.
 - **MediaTek MT7902** (`nekodrop-radio-mt.exe`) and **MT7921 / MT7922** (`nekodrop-radio-mtk.exe`), user-mode ports of Linux mt76: Concurrent (5 GHz) or on demand.
 
 The table says which have been tested on real hardware. Cards outside it: see [Supporting a new card](#supporting-a-new-card).
@@ -27,7 +27,7 @@ Quick summary of currently active cards:
 | Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ works in a user report ([#37](../../../issues/37)) |
 | Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` (`iwx`, Concurrent & On-Demand) | ⚠️ untested |
 | **Realtek RTL8852CE** | `10EC:C852` | embedded (`devourer`, On-Demand only) | ✅ built in; two-way AirDrop confirmed in user reports up to **~24.5 MB/s** ([#61](../../../issues/61)) |
-| **Realtek RTL8821CU** (USB) | `0BDA:C820` `0BDA:C821` | embedded (`devourer` over libusb, On-Demand only) | 🧪 experimental, built in; bring-up, monitor RX and injection verified on one dongle, AirDrop itself not yet run ([RTL8821CU.md](RTL8821CU.md)) |
+| **Realtek RTL8821CU** (USB) | `0BDA:C820` `0BDA:C821` | embedded (`devourer` over libusb, always on) | 🧪 **fork only**, experimental: WinUSB on the dongle's `MI_02`, iPhone → PC AirDrop verified (149 / 20 MHz, 14.2 MB Live Photo bundle at 339 KB/s); PC → iPhone untested ([RTL8821CU.md](RTL8821CU.md)) |
 | Intel SnJ `2726`, QnJ `2720`, Meteor Lake `7E40`/`2729` | `8086:` | not shipped upstream | ❌ |
 | **Intel Wi-Fi 7 BE200** (discrete) | `8086:272B` | linux-firmware `gl-c0-fm-c0-100` (`iwx` Bz/MLD path, Concurrent & On-Demand) | 🧪 experimental, built in; bring-up hardening + dual-LMAC diagnostics in `v2.2.9` ([#53](../../../issues/53), [docs/BE200.md](BE200.md)) |
 | Intel BE201 / BE211 (Wi-Fi 7, CNVi) | `8086:` `A840` `7740` | needs CNVi hardware | ❌ |

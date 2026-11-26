@@ -35,7 +35,7 @@ The step-by-step process, with the lessons from every port so far, is the skill
 | `Devourer` | `nekodrop-radio-rtl.exe` (winawdl `radio/` on raph559/devourer's Windows PCIe backend) | Realtek RTL8852CE | no: runs on demand |
 | `Mt76` | `nekodrop-radio-mt.exe` (`mtradio/`, ported from Linux mt76) | MediaTek MT7902 | yes (5 GHz) |
 | `MtkRadio` | `nekodrop-radio-mtk.exe` (`mtkradio/`) | MediaTek MT7922 / MT7921 | yes (5 GHz, experimental) |
-| `RtlUsb` | `nekodrop-radio-usb.exe` (the same winawdl `radio/` over raph559/devourer's libusb transport) | Realtek RTL8821CU USB dongle | no: runs on demand, keeps the dongle |
+| `RtlUsb` | `nekodrop-radio-usb.exe` (the same winawdl `radio/` over raph559/devourer's libusb transport) | Realtek RTL8821CU USB dongle | no: always on, keeps the dongle (this fork only) |
 
 ## Checklist / 步骤
 
@@ -106,9 +106,9 @@ driver ("a wheel") is a one-step addition; the rest are driver ports.
 | Card | Status |
 |---|---|
 | Realtek RTL8852CE `10EC:C852` | done (winawdl + devourer) |
-| Realtek RTL8821CU `0BDA:C820`/`C821` (USB) | done, experimental: `usbradio/` over devourer's libusb transport, `driver/winusb/` (WinUSB) instead of the register proxy; bring-up, RX and injection verified, AirDrop pending ([RTL8821CU.md](RTL8821CU.md)) |
+| Realtek RTL8821CU `0BDA:C820`/`C821` (USB) | done in this fork, experimental: `usbradio/` over devourer's libusb transport, `driver/winusb/` (WinUSB on the `MI_02` function) instead of the register proxy; iPhone → PC AirDrop verified at 149 / 20 MHz ([RTL8821CU.md](RTL8821CU.md)) |
 | Realtek RTL8852BE `10EC:B852`/`B85B`, RTL8851BE `B851` | devourer has the 8852B HAL (USB); its PCIe power sequence and single-BDRAM table are not ported, and devourer refuses it on PCIe |
-| Realtek USB adapters (RTL8812AU/8821AU/8812BU/8812CU/8852BU/8852CU…) | devourer drives them over libusb, but no daemon in this repo speaks their radio yet; the RTL8821CU is done (`usbradio/`, `0BDA:C820`/`C821`) and is the worked example of a USB card: a WinUSB package in `driver/winusb/` instead of the register proxy |
+| Realtek USB adapters (RTL8812AU/8821AU/8812BU/8812CU/8852BU/8852CU…) | devourer drives them over libusb, but no daemon in this repo speaks their radio yet; the RTL8821CU is done in this fork (`usbradio/`, `0BDA:C820`/`C821`) and is the worked example of a USB card: a WinUSB package in `driver/winusb/` instead of the register proxy |
 | Intel Meteor Lake `7E40`/`2729`, SnJ `2726` | `cards.h` knows them; needs the `ma`/`SnJ` firmware and API 72–83 command versions |
 | MediaTek MT7921/MT7922 `14C3:7961`/`0608`/`7922`/`0616` | no Windows user-mode driver yet: a port of Linux mt76 |
 | Intel BE200/BE201 | needs the MLD command set (API 86+) |
